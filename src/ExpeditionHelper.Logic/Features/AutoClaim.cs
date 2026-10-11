@@ -67,9 +67,12 @@ internal sealed class AutoClaim
         if (exhibit.IsNewExhibit) return "new discovery";
 
         var record = exhibit.ExhibitRecord;
-        if (record.Definition != null && record.Definition.IsShardExhibit)
+        if (record.Definition != null && record.Definition.IsShardExhibit && !exhibit.CanMoveToInventory)
         {
             // A piece of a multi-part exhibit; the reward scene's only option is "Attach to Exhibit".
+            // (The piece that completes the exhibit instead offers "Place Exhibit" / "Send to
+            // inventory" and CanMoveToInventory — that one is handled like a whole exhibit below;
+            // claiming it without inventory would put it in the player's cursor to place.)
             if (!_settings.AttachShards.Value) return "shard attaching disabled";
             claim = true;
             return $"shard of {exhibit.DisplayName}, already discovered";
