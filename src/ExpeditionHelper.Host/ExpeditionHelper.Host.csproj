@@ -20,9 +20,10 @@
 
   <!--
     The host is loaded once at game start, so the game locks it while running.
-    Deploy is skipped (with a warning) when the game is running.
+    Deploy is skipped (with a warning) when the game is running, and entirely with
+    -p:DeployToGame=false (used by tools/release.ps1).
   -->
-  <Target Name="DeployHost" AfterTargets="Build">
+  <Target Name="DeployHost" AfterTargets="Build" Condition="'$(DeployToGame)' != 'false'">
     <ItemGroup>
       <HostDeployFiles Include="$(OutDir)*.dll;$(OutDir)*.pdb" />
     </ItemGroup>

@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <!-- Dropping the build into the reload folder is what triggers the in-game hot reload. -->
-  <Target Name="DeployLogic" AfterTargets="Build">
+  <Target Name="DeployLogic" AfterTargets="Build" Condition="'$(DeployToGame)' != 'false'">
     <MakeDir Directories="$(LogicDeployDir)" />
     <!-- pdb first, dll last: the loader reacts to the dll changing. -->
     <Copy SourceFiles="$(OutDir)$(AssemblyName).pdb" DestinationFolder="$(LogicDeployDir)" Condition="Exists('$(OutDir)$(AssemblyName).pdb')" />

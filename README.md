@@ -4,6 +4,47 @@ BepInEx 6 (IL2CPP) mod that automates expeditions: auto-open reward crates, send
 already-unlocked types to inventory, and repeat an expedition until the museum has a pristine
 copy and/or maxed knowledge.
 
+## Install
+
+From the [releases](https://github.com/wslaghekke/tpm-expedition-helper/releases):
+
+- `ExpeditionHelper-<version>-with-BepInEx.zip` — BepInEx 6 (IL2CPP be.788, LGPL, licenses
+  included) plus the mod. Extract into the game folder (next to `TPM.exe`); the first start takes
+  a few minutes while BepInEx generates its interop assemblies.
+- `ExpeditionHelper-<version>.zip` — the mod only, for an existing BepInEx 6 be.788 install.
+  `UnityLogListening = false` must be set under `[Logging]` in `BepInEx/config/BepInEx.cfg`, or
+  the game crashes on start (Denuvo, see below).
+
+Settings are in game under Settings > Expedition Helper, and on each expedition's setup screen
+("Repeat until done").
+
+## Building it yourself
+
+The code compiles against the interop assemblies BepInEx generates from *your* copy of the game
+(`BepInEx/interop/`), so building needs the game installed; nothing game-derived is in this repo.
+
+1. Install BepInEx as above (the `-with-BepInEx` zip works) and start the game once, so
+   `BepInEx/interop/` gets generated.
+2. Install a .NET SDK, 6 or newer (the projects target `net6.0`, the runtime BepInEx ships).
+3. If the game isn't at `F:\SteamLibrary\steamapps\common\Two Point Museum`, create
+   `Directory.Build.user.props` next to `Directory.Build.props`:
+   ```xml
+   <Project><PropertyGroup><GameDir>D:\Games\Two Point Museum</GameDir></PropertyGroup></Project>
+   ```
+4. `dotnet build src/ExpeditionHelper.Logic -c Release` builds both projects and copies them into
+   the game's `BepInEx/plugins/ExpeditionHelper/` (close the game first: it locks the host DLL).
+   Add `-p:DeployToGame=false` to only build. A Debug build (the default) adds the dev bridge
+   described below; don't hand those out.
+
+### Releasing
+
+`tools/release.ps1 -Version 1.2.3` builds Release and writes both zips to `dist/1.2.3/`
+(downloading BepInEx be.788 once, checked against its SHA-256, plus the license texts).
+`-Publish` additionally tags `v1.2.3`, pushes the tag and creates the GitHub release with `gh`.
+Bump `Plugin.Version` in `src/ExpeditionHelper.Host/Plugin.cs` and commit first; the script
+refuses a mismatch or a dirty tree. It runs locally rather than in GitHub Actions because the
+build needs the game's interop assemblies.
+
 ## Layout
 
 | Path | What |
@@ -11,6 +52,7 @@ copy and/or maxed knowledge.
 | `src/ExpeditionHelper.Host` | Permanent BepInEx plugin. Hot-reloads the logic, forwards per-frame/config events, and (Debug only) runs the dev bridge. Changing it needs a game restart. |
 | `src/ExpeditionHelper.Logic` | All gameplay hooks and UI. Hot-reloaded: `dotnet build` drops it into `BepInEx/plugins/ExpeditionHelper/reload/` and the running game swaps it in. |
 | `tools/tpm` | CLI for the dev bridge (`ping`, `eval`, `reload`, `screenshot`, `log`). |
+| `tools/release.ps1` | Builds the release zips and (with `-Publish`) the GitHub release. |
 
 Game path defaults to `F:\SteamLibrary\steamapps\common\Two Point Museum`; override it in a
 `Directory.Build.user.props` (`<GameDir>…</GameDir>`).
@@ -83,3 +125,10 @@ Debug builds of the host listen on `127.0.0.1:27185`. Every request needs the to
 Nullable reference types are disabled and reference-type `?` annotations must not be used: the
 interop'd `UnityEngine.CoreModule` exposes public copies of `NullableAttribute` & co. that the
 compiler binds to and can't construct (CS0656).
+
+## License
+
+The mod's code is MIT (see `LICENSE`). The `-with-BepInEx` release zip also contains BepInEx and
+its bundled libraries, unmodified, under their own licenses (LGPL-2.1/3.0, MIT, Apache-2.0); their
+texts and a list of what is where are in that zip's `licenses/` folder. This project isn't
+affiliated with Two Point Studios or SEGA.
