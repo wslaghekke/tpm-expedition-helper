@@ -73,6 +73,8 @@ public static class Entry
         host.Exports["Repeat.StartNow"] = (Func<string, string>)repeat.StartNow;
 
         Features.SettingsTab.Install(Settings);
+        var setupOption = new Features.SetupRepeatOption(Settings);
+        host.Update += setupOption.Update;
 
         host.Log.LogInfo($"Logic loaded (built {BuildStamp()})");
     }
@@ -83,6 +85,8 @@ public static class Entry
         Game.AdvisorNotice.CloseAll();
         Game.InboxNotice.RemoveAll();
         Game.SettingsMenuTab.Uninstall();
+        Game.ExpeditionSetupSection.Uninstall();
+        Game.UiClicks.Reset();
         Hooks.DisposeAll();
         Host?.Log.LogInfo("Logic unloaded");
     }

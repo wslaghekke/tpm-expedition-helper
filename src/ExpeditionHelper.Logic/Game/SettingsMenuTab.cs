@@ -16,9 +16,8 @@ namespace ExpeditionHelper.Logic.Game;
 ///
 /// We can't attach handlers to those widgets (no managed → il2cpp delegates under Denuvo), so
 /// clicks are caught with detours on the widget classes and matched against our instances:
-///  - tab click: UINavigationFocus.OnPointerUp (mouse) and PrimaryPress (controller). The tab's
-///    own click handler, UITab.OnPointerDown, sits in Denuvo-protected code and can't be hooked;
-///    pointer-up is inherited from the hookable base class and fires for the same click;
+///  - tab click: <see cref="UiClicks"/> (the tab's own click handler, UITab.OnPointerDown, sits
+///    in Denuvo-protected code and can't be hooked);
 ///  - toggles: WidgetToggleSlider.OnButtonPressed; dropdowns: TMP_Dropdown.OnSelectItem.
 /// The menu itself switches pages with SetMode(SettingsMode), which knows nothing about our
 /// page: a detour on it hides our page whenever the game shows one of its own, and
@@ -35,10 +34,8 @@ internal static class SettingsMenuTab
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void InstanceFn(IntPtr self, IntPtr method);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SetModeFn(IntPtr self, int mode, IntPtr method);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SelectItemFn(IntPtr self, IntPtr toggle, IntPtr method);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void PointerFn(IntPtr self, IntPtr eventData, IntPtr method);
 
-    private static NativeHook<InstanceFn> _openMenuHook, _resetHook, _primaryPressHook, _togglePressedHook;
-    private static NativeHook<PointerFn> _pointerUpHook;
+    private static NativeHook<InstanceFn> _openMenuHook, _resetHook, _togglePressedHook;
     private static NativeHook<SetModeFn> _setModeHook;
     private static NativeHook<SelectItemFn> _selectItemHook;
 
@@ -74,15 +71,15 @@ internal static class SettingsMenuTab
         _openMenuHook = NativeHook<InstanceFn>.TryCreate(typeof(PreferencesMenu).GetMethod(nameof(PreferencesMenu.OpenMenu), f), OnOpenMenu);
         _setModeHook = NativeHook<SetModeFn>.TryCreate(typeof(PreferencesMenu).GetMethod(nameof(PreferencesMenu.SetMode), f), OnSetMode);
         _resetHook = NativeHook<InstanceFn>.TryCreate(typeof(PreferencesMenu).GetMethod(nameof(PreferencesMenu.ResetPreferences), f), OnResetPreferences);
-        _pointerUpHook = NativeHook<PointerFn>.TryCreate(typeof(UINavigationFocus).GetMethod(nameof(UINavigationFocus.OnPointerUp), f), OnPointerUp);
-        _primaryPressHook = NativeHook<InstanceFn>.TryCreate(typeof(UINavigationFocus).GetMethod(nameof(UINavigationFocus.PrimaryPress), f), OnPrimaryPress);
         _togglePressedHook = NativeHook<InstanceFn>.TryCreate(typeof(WidgetToggleSlider).GetMethod(nameof(WidgetToggleSlider.OnButtonPressed), f), OnTogglePressed);
         _selectItemHook = NativeHook<SelectItemFn>.TryCreate(typeof(TMPro.TMP_Dropdown).GetMethod("OnSelectItem", f), OnSelectItem);
-        if (_openMenuHook == null || _setModeHook == null || _pointerUpHook == null)
+        if (_openMenuHook == null || _setModeHook == null || !UiClicks.Install())
         {
             Entry.Host.Log.LogError("[settings] the in-game settings tab is unavailable (see hook errors above); edit the .cfg instead");
             return;
         }
+
+        UiClicks.Clicked += TabClicked;
 
         // Hot reload while the menu is open.
         var open = UnityEngine.Object.FindObjectOfType<PreferencesMenu>();
@@ -97,10 +94,12 @@ internal static class SettingsMenuTab
         if (cur == null) return;
         try
         {
-            if (cur.Shown && cur.Menu != null) cur.Menu.SetMode(cur.Menu._mode); // bring the game's page back
+            if (cur.Menu == null) return; // the menu was closed (destroyed) along with our objects
+            if (cur.Shown) cur.Menu.SetMode(cur.Menu._mode); // bring the game's page back
             // Destroy is deferred to the end of the frame: rename first so a logic version loaded
             // in the same frame doesn't find the old tab and skip injecting its own.
-            foreach (var go in new[] { cur.Tab?.gameObject, cur.Page })
+            // (Unity's == null, not ?.: wrappers of destroyed objects aren't C# null.)
+            foreach (var go in new[] { cur.Tab != null ? cur.Tab.gameObject : null, cur.Page })
             {
                 if (go == null) continue;
                 go.name = "(removed)";
@@ -262,18 +261,6 @@ internal static class SettingsMenuTab
         }
         catch (Exception e) { Entry.Host.Log.LogError($"[settings] reset failed: {e}"); return; }
         _resetHook.Original(self, method);
-    }
-
-    private static void OnPointerUp(IntPtr self, IntPtr eventData, IntPtr method)
-    {
-        _pointerUpHook.Original(self, eventData, method);
-        TabClicked(self);
-    }
-
-    private static void OnPrimaryPress(IntPtr self, IntPtr method)
-    {
-        _primaryPressHook.Original(self, method);
-        TabClicked(self);
     }
 
     /// <summary>After any UI element was clicked: act if it was one of the menu's tabs.</summary>

@@ -35,7 +35,7 @@ internal static class SettingsTab
         Toggle(page, "Claim expert XP", s.AutoClaimExpertXP, AutoOpen);
 
         page.Header("Repeat expeditions");
-        Toggle(page, "Repeat finished expeditions", s.RepeatExpeditions);
+        Toggle(page, "Repeat until done by default", s.RepeatExpeditions);
         Toggle(page, "Until a pristine copy is owned", s.UntilPristine, Repeat);
         Toggle(page, "Until knowledge is maxed", s.UntilMaxKnowledge, Repeat);
         Toggle(page, "Count inventory towards knowledge", s.CountInventoryTowardsKnowledge, () => Repeat() && s.UntilMaxKnowledge.Value);

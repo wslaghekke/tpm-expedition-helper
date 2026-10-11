@@ -87,7 +87,7 @@ internal sealed class RepeatExpeditions
     private void OnFinished(ExpeditionPlan plan, int runsDone)
     {
         _lastFinished[plan.Poi.ID] = plan;
-        if (!_settings.RepeatExpeditions.Value || plan.Type != EExpeditionType.Expedition) return;
+        if (!RepeatChoices.IsOn(_settings, plan.Poi.ID) || plan.Type != EExpeditionType.Expedition) return;
 
         string why = GoalsReached(plan);
         if (why == NoExhibits) { Log($"{plan.DisplayName}: no exhibits to collect here (materials/cash location), not repeating"); return; }
@@ -100,7 +100,7 @@ internal sealed class RepeatExpeditions
             Stop(plan, $"reached the limit of {max} repeat{(max == 1 ? "" : "s")}", notify: repeatedByUs);
             return;
         }
-        _pending.Add(new Pending { Plan = plan, Run = runsDone, StillNeeded = _lastGoals?.StillNeeded() ?? "" });
+        _pending.Add(new Pending { Plan = plan, Run = runsDone, StillNeeded = _lastGoals?.StillNeeded(_settings.UntilPristine.Value, _settings.UntilMaxKnowledge.Value) ?? "" });
         Log($"{plan.DisplayName}: run {runsDone} done, repeat queued");
     }
 
@@ -110,11 +110,10 @@ internal sealed class RepeatExpeditions
     private string GoalsReached(ExpeditionPlan plan)
     {
         bool wantPristine = _settings.UntilPristine.Value, wantKnowledge = _settings.UntilMaxKnowledge.Value;
-        if (!wantPristine && !wantKnowledge) return null; // no goals: only MaxRepeats stops it
-
         var goals = ExpeditionGoals.Evaluate(plan, _settings.CountInventoryTowardsKnowledge.Value);
         _lastGoals = goals;
-        if (goals.Exhibits.Count == 0) return NoExhibits;
+        if (goals.Exhibits.Count == 0) return NoExhibits; // repeats only collect exhibits
+        if (!wantPristine && !wantKnowledge) return null; // no goals: only MaxRepeats stops it
         Log($"{plan.DisplayName}: {goals.Describe()}{(goals.PristinePossible ? "" : " — pristine can't drop at this survey level yet")}");
         bool done = (!wantPristine || goals.AllPristine) && (!wantKnowledge || goals.AllKnowledge);
         if (!done) return null;
@@ -127,7 +126,7 @@ internal sealed class RepeatExpeditions
         var plan = p.Plan;
         long poi = plan.Poi.ID;
 
-        if (!_settings.RepeatExpeditions.Value) { Drop(p, null); return; }
+        if (!RepeatChoices.IsOn(_settings, poi)) { Drop(p, null); return; } // switched off since
         if (activePois.Contains(poi)) { Drop(p, null); return; } // the player sent one there already
 
         string hardStop = HardStopReason(plan);

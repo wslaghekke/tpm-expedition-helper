@@ -32,6 +32,18 @@ internal sealed class ExpeditionPlan
         Cargo = e.CargoModule,
     };
 
+    /// <summary>From the setup screen's settings (before sending; the team isn't captured).</summary>
+    public static ExpeditionPlan From(ExpeditionSettings s) => new()
+    {
+        Location = s.Location,
+        Poi = s.Definition,
+        PoiName = s.Definition?.name ?? "?",
+        Helipad = s.ItemID,
+        Approach = s.Approach,
+        Type = s.ExpeditionType,
+        Cargo = s.CargoModule,
+    };
+
     public WorldMapLocationPOIDefinition PoiDefinition => LevelDatabaseUtils.Get(Poi);
 
     public WorldMapLocationPOI PoiInstance =>

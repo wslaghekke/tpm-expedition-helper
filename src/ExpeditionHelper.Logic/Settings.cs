@@ -58,7 +58,7 @@ public sealed class Settings
             "When auto-opening, also claim crates with expert XP.");
 
         RepeatExpeditions = cfg.Bind("Repeat", "RepeatExpeditions", false,
-            "Automatically send a finished expedition again (same location, team and cargo) until every enabled goal below is reached for ALL exhibits that location can drop.");
+            "Default for the \"Repeat until done\" toggle on the expedition setup screen: send a finished expedition again (same location, team and cargo) until every enabled goal below is reached for ALL exhibits that location can drop. The toggle overrides this per location (until the game restarts).");
         UntilPristine = cfg.Bind("Repeat", "UntilPristine", true,
             "Goal: the museum owns a pristine copy (placed or in inventory) of every exhibit the location can drop.");
         UntilMaxKnowledge = cfg.Bind("Repeat", "UntilMaxKnowledge", true,

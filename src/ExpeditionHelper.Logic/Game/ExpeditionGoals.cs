@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using TPS.Game;
 using Unity.Entities;
 
@@ -20,6 +22,7 @@ internal sealed class ExpeditionGoals
     public sealed class ExhibitStatus
     {
         public string Name;
+        public bool Discovered; // found at this location before; otherwise don't name it to the player
         public bool PristineOwned;
         public int Knowledge, MaxKnowledge, PotentialKnowledge;
     }
@@ -44,6 +47,7 @@ internal sealed class ExpeditionGoals
 
         var owned = OwnedCopies();
         var knowledge = ExhibitKnowledgeRatings.Instance;
+        var discovered = TPS.Core.StaticGameSystem<DiscoveredPOIExhibits>.Instance; // what the setup screen's Stats tab shows
         foreach (var id in def.GetExhibitRewards(goals.UsesAlternateRewards).Iter())
         {
             var exhibit = LevelDatabaseUtils.Get(id);
@@ -68,6 +72,7 @@ internal sealed class ExpeditionGoals
             goals.Exhibits.Add(new ExhibitStatus
             {
                 Name = DisplayName(exhibit),
+                Discovered = discovered == null || discovered.IsDiscovered(plan.Poi, id),
                 PristineOwned = pristine,
                 Knowledge = rating.Knowledge,
                 MaxKnowledge = rating.MaxKnowledge,
@@ -128,16 +133,43 @@ internal sealed class ExpeditionGoals
         return owned;
     }
 
-    /// <summary>What's still missing, e.g. "pristine Ol' Smack-a-Vole, knowledge for Shell Phone (2/3)".</summary>
-    public string StillNeeded()
+    // Player-facing texts name only discovered exhibits; the rest are counted ("2 undiscovered"),
+    // like the setup screen's Stats tab. (Describe, for the log, names everything.)
+    private List<string> MissingPristine() =>
+        Named(Exhibits.Where(e => !e.PristineOwned), e => e.Name);
+
+    private List<string> MissingKnowledge() =>
+        Named(Exhibits.Where(e => e.PotentialKnowledge < e.MaxKnowledge), e => $"{e.Name} ({e.PotentialKnowledge}/{e.MaxKnowledge})");
+
+    private static List<string> Named(IEnumerable<ExhibitStatus> exhibits, Func<ExhibitStatus, string> format)
+    {
+        var list = exhibits.ToList();
+        var names = list.Where(e => e.Discovered).Select(format).ToList();
+        int hidden = list.Count(e => !e.Discovered);
+        if (hidden > 0) names.Add($"{hidden} undiscovered");
+        return names;
+    }
+
+    /// <summary>What's still missing, e.g. "pristine: Ol' Smack-a-Vole; knowledge: Shell Phone (2/3), 1 undiscovered".</summary>
+    public string StillNeeded(bool pristine = true, bool knowledge = true)
     {
         var parts = new List<string>();
-        foreach (var e in Exhibits)
-        {
-            if (!e.PristineOwned) parts.Add($"pristine {e.Name}");
-            if (e.PotentialKnowledge < e.MaxKnowledge) parts.Add($"knowledge for {e.Name} ({e.PotentialKnowledge}/{e.MaxKnowledge})");
-        }
-        return string.Join(", ", parts);
+        var p = MissingPristine();
+        var k = MissingKnowledge();
+        if (pristine && p.Count > 0) parts.Add("pristine: " + string.Join(", ", p));
+        if (knowledge && k.Count > 0) parts.Add("knowledge: " + string.Join(", ", k));
+        return string.Join("; ", parts);
+    }
+
+    /// <summary>What's missing as one line per goal: "Pristine: A, B" / "Knowledge: A (1/2), 1 undiscovered".</summary>
+    public string MissingByGoal(bool pristine, bool knowledge)
+    {
+        var lines = new List<string>();
+        var p = MissingPristine();
+        var k = MissingKnowledge();
+        if (pristine && p.Count > 0) lines.Add("Pristine: " + string.Join(", ", p));
+        if (knowledge && k.Count > 0) lines.Add("Knowledge: " + string.Join(", ", k));
+        return string.Join("\n", lines);
     }
 
     public string Describe() => string.Join(", ", Exhibits.Select(e =>
