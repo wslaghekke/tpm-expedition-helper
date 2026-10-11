@@ -19,6 +19,7 @@ internal sealed class SetupRepeatOption
     private readonly Settings _settings;
     private float _nextPoll, _nextStatus;
     private string _lastKey;
+    private IntPtr _preloadedFor;
 
     public SetupRepeatOption(Settings settings)
     {
@@ -32,6 +33,14 @@ internal sealed class SetupRepeatOption
         float now = UnityEngine.Time.unscaledTime;
         if (now < _nextPoll) return;
         _nextPoll = now + PollIntervalSeconds;
+
+        // Once per loaded museum: start loading the toggle template before the setup screen needs it.
+        var manager = ExpeditionManager.Instance;
+        if (manager != null && manager.Pointer != _preloadedFor)
+        {
+            _preloadedFor = manager.Pointer;
+            UiTemplates.Preload();
+        }
 
         var menu = ExpeditionSetupSection.OpenMenu;
         var settings = menu?._settings;

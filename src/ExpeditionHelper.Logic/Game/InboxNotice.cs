@@ -188,12 +188,20 @@ internal sealed class InboxNotice
         }
     }
 
-    // FindObjectOfType skips inactive objects, and the tray is hidden while the inbox menu is open.
+    private static InboxTrayUI _tray;
+
+    /// <summary>
+    /// The level's inbox, via its tray UI. Finding the tray scans every loaded object (~35 ms in a
+    /// museum), so it's cached and only searched again once the game destroyed it (level change).
+    /// FindObjectsOfTypeAll because FindObjectOfType skips the tray while the inbox menu hides it.
+    /// </summary>
     private static InboxMessages Inbox()
     {
+        if (_tray != null && _tray._inbox != null) return _tray._inbox;
+        _tray = null;
         foreach (var tray in UnityEngine.Resources.FindObjectsOfTypeAll<InboxTrayUI>())
-            if (tray._inbox != null) return tray._inbox;
-        return null;
+            if (tray._inbox != null && tray.gameObject.scene.IsValid()) { _tray = tray; break; }
+        return _tray?._inbox;
     }
 
     private static InboxMessageType GenericType()

@@ -65,17 +65,20 @@ public static class Entry
         Game.InboxNotice.RemoveAll(); // orphans from a previous logic version
 
         var autoClaim = new Features.AutoClaim(Settings);
-        host.Update += autoClaim.Update;
+        host.Update += Diagnostics.UpdateTimings.Wrap("auto-claim", autoClaim.Update);
 
         var repeat = new Features.RepeatExpeditions(Settings);
-        host.Update += repeat.Update;
+        host.Update += Diagnostics.UpdateTimings.Wrap("repeat", repeat.Update);
         host.Exports["Repeat.DryRun"] = (Func<string>)repeat.DryRun;
         host.Exports["Repeat.StartNow"] = (Func<string, string>)repeat.StartNow;
         Features.SkipClosedMapFade.Install();
 
         Features.SettingsTab.Install(Settings);
         var setupOption = new Features.SetupRepeatOption(Settings);
-        host.Update += setupOption.Update;
+        host.Update += Diagnostics.UpdateTimings.Wrap("setup-screen", setupOption.Update);
+        host.Exports["Perf.Report"] = (Func<string>)Diagnostics.UpdateTimings.Report;
+        host.Exports["Perf.Reset"] = (Action)Diagnostics.UpdateTimings.Reset;
+        Diagnostics.UpdateTimings.Reset();
 
         host.Log.LogInfo($"Logic loaded (built {BuildStamp()})");
     }

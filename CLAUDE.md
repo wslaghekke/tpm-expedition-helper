@@ -37,6 +37,15 @@ JSON. Globals: `Host` (HostApi: `Log`, `Config`, `Exports`), `Logic` (the loaded
 hook target with it first — plus `Repeat.DryRun`, `Repeat.StartNow`. Reusable probes live in
 `tools/snippets/*.csx`; keep read-only ones, delete throwaway prototypes.
 
+**Per-frame code must not search the scene.** `Object.FindObjectOfType` / `FindObjectsOfType` /
+`Resources.FindObjectsOfTypeAll` cost ~20 ms each in a museum: a per-frame watcher (`Host.Update += ...`)
+calling three of them took the game from ~70 to ~12 fps. Cache what you find and re-find only when
+it's gone (Unity `== null`), at most about once a second. Script delegates themselves are fast
+(~0.1 µs to read `Time.frameCount`). Check `Host.Update` for leftover script handlers when fps
+drops; a logic reload (`tools/tpm reload`) clears them. To measure fps without per-frame code,
+record `Time.frameCount`/`realtimeSinceStartup` in `Host.Exports`, wait, then diff them in a second
+eval; `Host.Exports["Perf.Report"]` shows what the mod's own handlers cost.
+
 Pipe JSON results through `python -c "import json,sys;print(json.load(sys.stdin)['result'])"` for
 long text. To follow events, run a Monitor on `tail -F .../BepInEx/LogOutput.log` filtered to
 `[repeat]|[auto-claim]|[settings]|[setup]|Error|Exception` (exclude `HarmonyX`/`TypeLoadException`

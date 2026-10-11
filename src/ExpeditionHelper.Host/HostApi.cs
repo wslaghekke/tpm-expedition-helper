@@ -17,7 +17,14 @@ public sealed class HostApi
     public string PluginDir { get; }
 
     /// <summary>Raised every frame on the main thread.</summary>
-    public event Action Update;
+    public event Action Update
+    {
+        add { _update += value; _updateHandlers = null; }
+        remove { _update -= value; _updateHandlers = null; }
+    }
+
+    private Action _update;
+    private Delegate[] _updateHandlers; // cached invocation list: no allocation per frame
 
     /// <summary>Raised on the main thread when any config value changes (in game or by editing the .cfg).</summary>
     public event Action<SettingChangedEventArgs> ConfigChanged;
@@ -35,9 +42,9 @@ public sealed class HostApi
 
     internal void RaiseUpdate()
     {
-        var handlers = Update;
-        if (handlers == null) return;
-        foreach (Action h in handlers.GetInvocationList())
+        if (_update == null) return;
+        var handlers = _updateHandlers ??= _update.GetInvocationList();
+        foreach (Action h in handlers)
         {
             try { h(); }
             catch (Exception e)
@@ -51,7 +58,8 @@ public sealed class HostApi
 
     internal void ResetSubscriptions()
     {
-        Update = null;
+        _update = null;
+        _updateHandlers = null;
         ConfigChanged = null;
         Exports.Clear();
     }
