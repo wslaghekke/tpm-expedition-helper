@@ -104,6 +104,15 @@ internal sealed class ExpeditionGoals
             Add(c.ExhibitDefinitionID.ID, c.ExhibitQuality, false);
         }
 
+        // Exhibits claimed from expeditions (and ones taken back from the museum) are stored in the
+        // inventory as real entities, not as Items records.
+        foreach (var e in Inventory.Instance.ReturnedEntities)
+        {
+            if (!entityManager.HasComponent<ECExhibit>(e)) continue;
+            var c = entityManager.GetComponentData<ECExhibit>(e);
+            Add(c.ExhibitDefinitionID.ID, c.ExhibitQuality, true);
+        }
+
         foreach (var item in Inventory.Instance.Items)
         {
             var exhibit = item.TryCast<InventoryItem_Exhibit>();
