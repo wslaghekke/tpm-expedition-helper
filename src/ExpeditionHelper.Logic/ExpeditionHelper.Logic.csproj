@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>ExpeditionHelper.Logic</AssemblyName>
+    <RootNamespace>ExpeditionHelper.Logic</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Disassembler shipped with BepInEx (used by Il2CppInterop); SafeHook decodes function prologues with it. -->
+    <Reference Include="$(BepInExDir)\core\Iced.dll" Private="false" />
+    <ProjectReference Include="..\ExpeditionHelper.Host\ExpeditionHelper.Host.csproj" Private="false" />
+  </ItemGroup>
+
+  <!-- Dropping the build into the reload folder is what triggers the in-game hot reload. -->
+  <Target Name="DeployLogic" AfterTargets="Build">
+    <MakeDir Directories="$(LogicDeployDir)" />
+    <!-- pdb first, dll last: the loader reacts to the dll changing. -->
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).pdb" DestinationFolder="$(LogicDeployDir)" Condition="Exists('$(OutDir)$(AssemblyName).pdb')" />
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).dll" DestinationFolder="$(LogicDeployDir)" />
+  </Target>
+</Project>

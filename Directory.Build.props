@@ -1,0 +1,44 @@
+<Project>
+  <!--
+    Shared build settings. Override GameDir per machine with a Directory.Build.user.props
+    next to this file, or with `dotnet build -p:GameDir=...`.
+  -->
+  <Import Project="Directory.Build.user.props" Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.user.props')" />
+
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">F:\SteamLibrary\steamapps\common\Two Point Museum</GameDir>
+    <BepInExDir>$(GameDir)\BepInEx</BepInExDir>
+    <PluginDeployDir>$(BepInExDir)\plugins\ExpeditionHelper</PluginDeployDir>
+    <!-- Hot-reloadable logic lives outside the plugin scan path's root so BepInEx never loads it itself. -->
+    <LogicDeployDir>$(PluginDeployDir)\reload</LogicDeployDir>
+
+    <!-- BepInEx 6 IL2CPP runs plugins on its bundled .NET 6 runtime. -->
+    <TargetFramework>net6.0</TargetFramework>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <LangVersion>latest</LangVersion>
+    <!--
+      Nullable must stay disabled: the interop'd UnityEngine.CoreModule (and others) contain public
+      copies of System.Runtime.CompilerServices.NullableAttribute & co., which the compiler then
+      binds to and can't construct (CS0656). `?` annotations are kept as documentation; CS8632 silenced.
+    -->
+    <Nullable>disable</Nullable>
+    <NoWarn>$(NoWarn);CS8632</NoWarn>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>portable</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- BepInEx core + generated game interop assemblies. Never copied to output. -->
+  <ItemGroup>
+    <Reference Include="$(BepInExDir)\core\BepInEx.Core.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\BepInEx.Unity.IL2CPP.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\BepInEx.Unity.Common.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\0Harmony.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\MonoMod.RuntimeDetour.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\Il2CppInterop.Runtime.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\Il2CppInterop.Common.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\interop\*.dll" Private="false" />
+  </ItemGroup>
+</Project>

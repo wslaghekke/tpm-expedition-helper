@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Talk to the in-game dev bridge (Debug builds only).
+#
+#   tools/tpm ping
+#   tools/tpm eval 'UnityEngine.Time.timeScale'
+#   tools/tpm eval -f snippet.csx
+#   tools/tpm reload
+#   tools/tpm screenshot
+#   tools/tpm log [lines]
+set -euo pipefail
+
+GAME_DIR="${TPM_GAME_DIR:-/f/SteamLibrary/steamapps/common/Two Point Museum}"
+TOKEN_FILE="$GAME_DIR/BepInEx/config/ExpeditionHelper.devtoken"
+[ -f "$TOKEN_FILE" ] || { echo "No token file at $TOKEN_FILE - is the game running with a Debug build?" >&2; exit 1; }
+PORT="$(sed -n 1p "$TOKEN_FILE" | tr -d '\r')"
+TOKEN="$(sed -n 2p "$TOKEN_FILE" | tr -d '\r')"
+BASE="http://127.0.0.1:$PORT"
+
+req() { curl -sS --max-time "${TPM_TIMEOUT:-60}" -H "X-Token: $TOKEN" "$@"; echo; }
+
+cmd="${1:-ping}"; shift || true
+case "$cmd" in
+  ping)       req "$BASE/ping" ;;
+  reload)     req -X POST "$BASE/reload" ;;
+  screenshot) req "$BASE/screenshot" ;;
+  log)        req "$BASE/log?lines=${1:-100}" ;;
+  eval)
+    if [ "${1:-}" = "-f" ]; then req -X POST --data-binary @"$2" "$BASE/eval"
+    else req -X POST --data-binary "$1" "$BASE/eval"; fi ;;
+  *) echo "unknown command: $cmd" >&2; exit 2 ;;
+esac

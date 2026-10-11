@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>ExpeditionHelper.Host</AssemblyName>
+    <RootNamespace>ExpeditionHelper.Host</RootNamespace>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- The dev bridge (/eval etc.) only exists in Debug builds; Release ships without Roslyn. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);DEV_BRIDGE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <!-- 4.4.0 is the newest Roslyn whose dependencies are satisfied by BepInEx's bundled .NET 6 runtime. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.4.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' != 'Debug'">
+    <Compile Remove="Dev\**" />
+  </ItemGroup>
+
+  <!--
+    The host is loaded once at game start, so the game locks it while running.
+    Deploy is skipped (with a warning) when the game is running.
+  -->
+  <Target Name="DeployHost" AfterTargets="Build">
+    <ItemGroup>
+      <HostDeployFiles Include="$(OutDir)*.dll;$(OutDir)*.pdb" />
+    </ItemGroup>
+    <MakeDir Directories="$(PluginDeployDir)" />
+    <Copy SourceFiles="@(HostDeployFiles)" DestinationFolder="$(PluginDeployDir)" SkipUnchangedFiles="true" ContinueOnError="WarnAndContinue" Retries="0" />
+  </Target>
+</Project>
