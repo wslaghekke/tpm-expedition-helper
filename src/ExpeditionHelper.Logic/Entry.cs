@@ -71,6 +71,7 @@ public static class Entry
         host.Update += repeat.Update;
         host.Exports["Repeat.DryRun"] = (Func<string>)repeat.DryRun;
         host.Exports["Repeat.StartNow"] = (Func<string, string>)repeat.StartNow;
+        Features.SkipClosedMapFade.Install();
 
         Features.SettingsTab.Install(Settings);
         var setupOption = new Features.SetupRepeatOption(Settings);
