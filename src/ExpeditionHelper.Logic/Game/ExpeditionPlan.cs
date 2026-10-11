@@ -80,6 +80,20 @@ internal sealed class ExpeditionPlan
         return s;
     }
 
-    /// <summary>"Digiverse Dredge GreaterMarrows" from "LocationPOI_Digiverse_Dredge_GreaterMarrows".</summary>
-    public string DisplayName => PoiName.Replace("LocationPOI_", "").Replace('_', ' ');
+    /// <summary>The names the world map shows, e.g. "Bone Belt – Hermit Hills".</summary>
+    public string DisplayName
+    {
+        get
+        {
+            try
+            {
+                string location = LevelDatabaseUtils.Get(Location)?.Name.Translation;
+                string poi = PoiDefinition?.Name.Translation;
+                if (!string.IsNullOrEmpty(location) && !string.IsNullOrEmpty(poi)) return $"{location} – {poi}";
+                if (!string.IsNullOrEmpty(poi)) return poi;
+            }
+            catch { /* fall back to the asset name */ }
+            return PoiName.Replace("LocationPOI_", "").Replace('_', ' ');
+        }
+    }
 }
