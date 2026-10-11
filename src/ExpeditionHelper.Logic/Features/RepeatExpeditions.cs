@@ -24,7 +24,7 @@ internal sealed class RepeatExpeditions
     {
         public ExpeditionPlan Plan;
         public int Run;                 // runs completed so far in this chain
-        public string LastWaitReason;
+        public string LastWaitReason;   // wait reason with numbers stripped, to log changes of kind only
         public bool WaitNotified;
         public AdvisorNotice Notice;
     }
@@ -88,7 +88,8 @@ internal sealed class RepeatExpeditions
         if (why != null) { Stop(plan, why); return; }
         if (runsDone >= _settings.MaxRepeats.Value + 1)
         {
-            Stop(plan, $"reached the limit of {_settings.MaxRepeats.Value} repeats");
+            int max = _settings.MaxRepeats.Value;
+            Stop(plan, $"reached the limit of {max} repeat{(max == 1 ? "" : "s")}");
             return;
         }
         _pending.Add(new Pending { Plan = plan, Run = runsDone });
@@ -128,8 +129,10 @@ internal sealed class RepeatExpeditions
 
         if (wait != null)
         {
-            if (wait != p.LastWaitReason) Log($"{plan.DisplayName}: waiting — {wait}");
-            p.LastWaitReason = wait;
+            // Log when the kind of reason changes, not every time a number in it moves.
+            string kind = new string(wait.Where(c => !char.IsDigit(c) && c != '.' && c != ',' && c != '-').ToArray());
+            if (kind != p.LastWaitReason) Log($"{plan.DisplayName}: waiting — {wait}");
+            p.LastWaitReason = kind;
             if (!p.WaitNotified)
             {
                 p.WaitNotified = true;
