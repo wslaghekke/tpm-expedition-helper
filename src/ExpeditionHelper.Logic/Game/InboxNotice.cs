@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using ExpeditionHelper.Host;
 using ExpeditionHelper.Logic.Hooking;
-using TPS.Core.Localisation;
 using TPS.Game;
 using TPS.Game.UI;
 using UnityEngine.AddressableAssets;
@@ -68,8 +67,8 @@ internal sealed class InboxNotice
 
         var def = new InboxMessageDefinition
         {
-            Title = Label(title),
-            Text = Label(text),
+            Title = UiText.Plain(title),
+            Text = UiText.Plain(text),
             Icon = template.Icon,
             MessageType = type,
             UseScaledTime = template.UseScaledTime,
@@ -94,7 +93,7 @@ internal sealed class InboxNotice
         _text = text;
         _message.Text = text;
         if (_openView != null && _openView.isOpen && _openView._textDescription != null)
-            SetText(_openView._textDescription, text);
+            UiText.Set(_openView._textDescription, text);
     }
 
     public void Remove()
@@ -152,12 +151,12 @@ internal sealed class InboxNotice
             var view = new InboxMenu_Message(self).TryCast<InboxMenu_Message_Generic>();
             if (view == null) return;
             notice._openView = view;
-            if (view._textDescription != null) SetText(view._textDescription, notice._text);
+            if (view._textDescription != null) UiText.Set(view._textDescription, notice._text);
             if (notice._buttonLabel != null && view._buttons != null && view._buttons.Length > 0 && view._buttons[0] != null)
             {
                 // The button has several labels (only one active, depending on input device).
                 foreach (var label in view._buttons[0].GetComponentsInChildren<TMPro.TMP_Text>(true))
-                    if (!string.IsNullOrEmpty(label.text)) SetText(label, notice._buttonLabel);
+                    if (!string.IsNullOrEmpty(label.text)) UiText.Set(label, notice._buttonLabel);
             }
         }
         catch (Exception e)
@@ -190,13 +189,6 @@ internal sealed class InboxNotice
     }
 
     // FindObjectOfType skips inactive objects, and the tray is hidden while the inbox menu is open.
-    private static void SetText(TMPro.TMP_Text text, string value)
-    {
-        var localize = text.GetComponent<I2.Loc.Localize>();
-        if (localize != null) localize.enabled = false;
-        text.text = value;
-    }
-
     private static InboxMessages Inbox()
     {
         foreach (var tray in UnityEngine.Resources.FindObjectsOfTypeAll<InboxTrayUI>())
@@ -210,12 +202,5 @@ internal sealed class InboxNotice
         try { _genericType = Addressables.LoadAssetAsync<InboxMessageType>(GenericInboxTypeGuid).WaitForCompletion(); }
         catch (Exception e) { Entry.Host.Log.LogError($"[inbox] loading the generic inbox type failed: {e.Message}"); }
         return _genericType;
-    }
-
-    private static LocalisedString Label(string text)
-    {
-        var ls = new LocalisedString();
-        if (!string.IsNullOrEmpty(text)) ls._dev = text;
-        return ls;
     }
 }

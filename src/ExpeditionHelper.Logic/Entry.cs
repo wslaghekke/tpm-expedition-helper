@@ -24,7 +24,11 @@ public static class Entry
         Host = host;
         Settings = new Settings(host.Config);
 
-        host.ConfigChanged += e => host.Log.LogInfo($"Setting changed: {e.ChangedSetting.Definition} = {e.ChangedSetting.BoxedValue}");
+        host.ConfigChanged += e =>
+        {
+            host.Log.LogInfo($"Setting changed: {e.ChangedSetting.Definition} = {e.ChangedSetting.BoxedValue}");
+            MainThread.Post(Game.SettingsMenuTab.Refresh); // .cfg reloads arrive on the file watcher's thread
+        };
 
         // Dev bridge access (tools/snippets).
         host.Exports["NativeCodeCheck.WhyUnsafe"] = (Func<System.Reflection.MethodBase, string>)NativeCodeCheck.WhyUnsafe;
@@ -68,6 +72,8 @@ public static class Entry
         host.Exports["Repeat.DryRun"] = (Func<string>)repeat.DryRun;
         host.Exports["Repeat.StartNow"] = (Func<string, string>)repeat.StartNow;
 
+        Features.SettingsTab.Install(Settings);
+
         host.Log.LogInfo($"Logic loaded (built {BuildStamp()})");
     }
 
@@ -76,6 +82,7 @@ public static class Entry
         Game.GamePopup.CloseAll();
         Game.AdvisorNotice.CloseAll();
         Game.InboxNotice.RemoveAll();
+        Game.SettingsMenuTab.Uninstall();
         Hooks.DisposeAll();
         Host?.Log.LogInfo("Logic unloaded");
     }

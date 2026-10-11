@@ -52,6 +52,21 @@ Detours must catch all exceptions.
 
 Raise game events with `GameEventsUtil.Raise(evt)`, never the generated `GameEvents.Raise<T>`.
 
+### Game UI
+
+We can't create MonoBehaviours or hand delegates to the game's widgets, so UI is built from clones
+of the game's own objects (`Object.Instantiate`) and their clicks are caught with detours on the
+widget classes, matched against our instances' pointers (see `SettingsMenuTab`, `InboxNotice`).
+Gotchas found so far:
+- disable a cloned label's I2 `Localize` component(s) before setting text (`UiText.Set`);
+- a cloned nested Canvas/GraphicRaycaster gets clicks but not the game's tooltip hover check —
+  remove them so the clone uses the parent canvas;
+- some click handlers (e.g. `UITab.OnPointerDown`) sit in Denuvo code: hook an inherited
+  base-class method instead (`UINavigationFocus.OnPointerUp` / `PrimaryPress`);
+- a cloned tab still runs the handler of the tab it was copied from;
+- `Object.Destroy` is deferred to the end of the frame: rename what you destroy if a reload in
+  the same frame looks it up by name.
+
 ### Hot-reload rules for Logic
 
 - subscribe to `Host.Update` / `Host.ConfigChanged`

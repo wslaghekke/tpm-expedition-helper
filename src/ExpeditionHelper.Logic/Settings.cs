@@ -36,6 +36,13 @@ public sealed class Settings
     public ConfigEntry<int> MaxRepeats { get; }
     public ConfigEntry<NotificationLevel> Notifications { get; }
 
+    public ConfigEntryBase[] Entries => new ConfigEntryBase[]
+    {
+        AutoOpenCrates, SendKnownExhibitsToInventory, AttachShards, AutoClaimMaterials, AutoClaimExpertXP,
+        RepeatExpeditions, UntilPristine, UntilMaxKnowledge, CountInventoryTowardsKnowledge, MinCashReserve,
+        OnlyWhenProfitable, KeepMonthlyCostsCovered, AvoidSeasonalDangers, MaxRepeats, Notifications,
+    };
+
     public Settings(ConfigFile cfg)
     {
         AutoOpenCrates = cfg.Bind("Expeditions", "AutoOpenCrates", false,
