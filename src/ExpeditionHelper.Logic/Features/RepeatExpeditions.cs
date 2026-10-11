@@ -91,11 +91,13 @@ internal sealed class RepeatExpeditions
 
         string why = GoalsReached(plan);
         if (why == NoExhibits) { Log($"{plan.DisplayName}: no exhibits to collect here (materials/cash location), not repeating"); return; }
-        if (why != null) { Stop(plan, why); return; }
+        // runsDone == 1: the player sent it and the mod never repeated it — log only, no notification.
+        bool repeatedByUs = runsDone > 1;
+        if (why != null) { Stop(plan, why, notify: repeatedByUs); return; }
         if (runsDone >= _settings.MaxRepeats.Value + 1)
         {
             int max = _settings.MaxRepeats.Value;
-            Stop(plan, $"reached the limit of {max} repeat{(max == 1 ? "" : "s")}");
+            Stop(plan, $"reached the limit of {max} repeat{(max == 1 ? "" : "s")}", notify: repeatedByUs);
             return;
         }
         _pending.Add(new Pending { Plan = plan, Run = runsDone, StillNeeded = _lastGoals?.StillNeeded() ?? "" });
@@ -226,10 +228,10 @@ internal sealed class RepeatExpeditions
         if (reason != null) Stop(p.Plan, reason);
     }
 
-    private void Stop(ExpeditionPlan plan, string reason)
+    private void Stop(ExpeditionPlan plan, string reason, bool notify = true)
     {
         Log($"{plan.DisplayName}: not repeating — {reason}");
-        Notify(NotifyKind.Stopped, $"Repeat stopped: {plan.DisplayName}", $"Not repeating: {reason}.");
+        if (notify) Notify(NotifyKind.Stopped, $"Repeat stopped: {plan.DisplayName}", $"Not repeating: {reason}.");
     }
 
     private enum NotifyKind { Started, Stopped }
