@@ -15,7 +15,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "tpm.expeditionhelper";
     public const string Name = "Expedition Helper";
-    public const string Version = "0.1.0";
+    public const string Version = "0.1.1";
 
     internal static Plugin Instance { get; private set; } = null!;
     internal static ManualLogSource Logger { get; private set; } = null!;
