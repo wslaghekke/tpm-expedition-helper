@@ -57,6 +57,11 @@ internal sealed class ExpeditionGoals
             if (countInventory && !exhibit.IsUnique)
             {
                 int analysable = copies.Count(c => c.Item2); // inventory copies
+                // Analysing destroys the exhibit: if the only pristine copy is in the inventory,
+                // keep it out of the knowledge count so it can't satisfy both goals.
+                bool pristinePlaced = copies.Any(c => !c.Item2 && c.Item1 == ExhibitQuality.Pristine);
+                bool pristineInInventory = copies.Any(c => c.Item2 && c.Item1 == ExhibitQuality.Pristine);
+                if (!exhibit.ShouldIgnoreQuality && !pristinePlaced && pristineInInventory) analysable--;
                 if (analysable > 0)
                     potential = rating.InitialKnowledge + knowledge.CalculateKnowledgeLevel(rating.Insight + analysable);
             }
