@@ -49,6 +49,17 @@ public static class Entry
             return "shown";
         });
 
+        host.Exports["Inbox.Test"] = (Func<string>)(() =>
+        {
+            var n = Game.InboxNotice.Send("Expedition Helper", "Test: repeat for Two Point Sea – Pebberley Reef is waiting.\nWaiting for: Kate Chiptune to recover (Banged Up).", "Cancel repeat");
+            if (n == null) return "inbox notice not sent (see log)";
+            n.Clicked += () => host.Log.LogInfo("[inbox] test notice clicked");
+            host.Exports["Inbox.Last"] = n;
+            return "sent";
+        });
+
+        Game.InboxNotice.RemoveAll(); // orphans from a previous logic version
+
         var autoClaim = new Features.AutoClaim(Settings);
         host.Update += autoClaim.Update;
 
@@ -64,6 +75,7 @@ public static class Entry
     {
         Game.GamePopup.CloseAll();
         Game.AdvisorNotice.CloseAll();
+        Game.InboxNotice.RemoveAll();
         Hooks.DisposeAll();
         Host?.Log.LogInfo("Logic unloaded");
     }

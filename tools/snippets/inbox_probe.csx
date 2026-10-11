@@ -21,7 +21,7 @@ foreach (var t in asm.GetTypes())
 }
 if (inbox == null)
 {
-    var tray = UnityEngine.Object.FindObjectOfType<TPS.Game.UI.InboxTrayUI>();
+    var tray = UnityEngine.Resources.FindObjectsOfTypeAll<TPS.Game.UI.InboxTrayUI>().FirstOrDefault(t => t._inbox != null);
     sb.AppendLine($"InboxTrayUI live: {tray != null}");
     inbox = tray?._inbox;
 }
