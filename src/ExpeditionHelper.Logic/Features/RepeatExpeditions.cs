@@ -135,6 +135,8 @@ internal sealed class RepeatExpeditions
 
         var settings = plan.BuildSettings(out string problem);
         string wait = WaitReason(plan) ?? problem;
+        if (wait == null && settings != null && _settings.AvoidSeasonalDangers.Value)
+            wait = SeasonalDangers.Uncountered(settings);
         if (wait == null && settings != null)
             wait = MoneyCheck.WhyNotAffordable(settings.CalculateCost(), _settings);
 
@@ -298,6 +300,7 @@ internal sealed class RepeatExpeditions
             lines.Add($"  goals: {goals.Describe()}");
             lines.Add($"  goals reached: {GoalsReached(plan) ?? "no"}");
             lines.Add($"  hard stop: {HardStopReason(plan) ?? "none"}; wait: {WaitReason(plan) ?? "none"}; build settings: {problem ?? "ok"}");
+            lines.Add($"  seasonal: {(settings == null ? "n/a" : SeasonalDangers.Uncountered(settings) ?? "no uncountered dangers")}");
             lines.Add($"  cost {cost:N0}; money: {(cost >= 0 ? MoneyCheck.WhyNotAffordable(cost, _settings) ?? "ok" : "n/a")}; bills {MoneyCheck.MonthEndBills():N0}; projected profit {MoneyCheck.ProjectedProfit():N0}");
         }
         return lines.Count == 0 ? "no expeditions" : string.Join("\n", lines);

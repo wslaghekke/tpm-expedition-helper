@@ -32,6 +32,7 @@ public sealed class Settings
     public ConfigEntry<int> MinCashReserve { get; }
     public ConfigEntry<bool> OnlyWhenProfitable { get; }
     public ConfigEntry<bool> KeepMonthlyCostsCovered { get; }
+    public ConfigEntry<bool> AvoidSeasonalDangers { get; }
     public ConfigEntry<int> MaxRepeats { get; }
     public ConfigEntry<NotificationLevel> Notifications { get; }
 
@@ -63,6 +64,8 @@ public sealed class Settings
             "Hold off repeating while the museum is losing money (negative profit); resume once it's profitable again.");
         KeepMonthlyCostsCovered = cfg.Bind("Repeat", "KeepMonthlyCostsCovered", true,
             "Hold off repeating if paying the expedition would leave too little cash to cover the upcoming month-end costs (salaries, loans, ...).");
+        AvoidSeasonalDangers = cfg.Bind("Repeat", "AvoidSeasonalDangers", true,
+            "Hold a repeat while the run would overlap a seasonal danger the team and cargo can't counter; it goes once the season has passed.");
         MaxRepeats = cfg.Bind("Repeat", "MaxRepeats", 10,
             "Safety limit: stop after this many automatic repeats of the same expedition in a row.");
         Notifications = cfg.Bind("Repeat", "Notifications", NotificationLevel.All,
