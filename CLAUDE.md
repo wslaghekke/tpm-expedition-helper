@@ -65,6 +65,6 @@ noise that every reload prints).
 
 ## Repo
 
-- GitHub: `wslaghekke/tpm-expedition-helper` (private). Commit only when asked.
+- GitHub: `wslaghekke/tpm-expedition-helper` (public). Commit only when asked.
 - This repo's git email is the GitHub noreply address (local config); keep it that way.
 - Never commit `.devtoken`, logs, saves, screenshots or `bin/obj`.
