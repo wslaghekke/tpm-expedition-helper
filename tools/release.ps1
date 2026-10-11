@@ -53,6 +53,16 @@ $components = [ordered]@{
 
 function Step($message) { Write-Host "==> $message" -ForegroundColor Cyan }
 
+# Run git/gh: their progress messages go to stderr, which Windows PowerShell turns into
+# terminating errors under -ErrorAction Stop (when stderr is redirected). Judge by exit code instead.
+function Native([scriptblock] $command, [switch] $AllowFailure) {
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $command 2>&1 | ForEach-Object { "$_" } }
+    finally { $ErrorActionPreference = $previousPreference }
+    if ($LASTEXITCODE -ne 0 -and -not $AllowFailure) { throw "Failed (exit $LASTEXITCODE): $command" }
+}
+
 # Compress-Archive (Windows PowerShell 5.1) stores paths with backslashes, which some extractors
 # (Linux/Proton tools, mod managers) turn into file names; write standard '/' entries instead.
 function New-Zip($sourceDir, $zipPath) {
@@ -75,12 +85,20 @@ $tag = "v$Version"
 $pluginVersion = (Select-String -Path src/ExpeditionHelper.Host/Plugin.cs -Pattern 'const string Version = "([^"]+)"').Matches[0].Groups[1].Value
 if ($pluginVersion -ne $Version) { throw "Plugin.Version in src/ExpeditionHelper.Host/Plugin.cs is '$pluginVersion'; set it to '$Version' and commit first." }
 
+$resume = $false
 if ($Publish) {
     if (git status --porcelain) { throw 'Working tree has uncommitted changes; commit them first.' }
-    if (git tag --list $tag) { throw "Tag $tag already exists." }
-    if (git ls-remote --tags origin "refs/tags/$tag") { throw "Tag $tag already exists on origin." }
     gh auth status *> $null
     if ($LASTEXITCODE -ne 0) { throw 'gh is not logged in (run: gh auth login).' }
+    if (git ls-remote --tags origin "refs/tags/$tag") {
+        # A previous run pushed the tag but didn't get to the release: finish it, if it's this commit.
+        $tagCommit = (git ls-remote --tags origin "refs/tags/$tag^{}") -split '\s+' | Select-Object -First 1
+        Native { gh release view $tag } -AllowFailure | Out-Null
+        if ($LASTEXITCODE -eq 0) { throw "Release $tag already exists." }
+        if ($tagCommit -ne (git rev-parse HEAD)) { throw "Tag $tag already exists on origin for another commit." }
+        $resume = $true
+    }
+    elseif (git tag --list $tag) { throw "Tag $tag already exists locally (not on origin); delete it or pick another version." }
 }
 
 # ---- build ----------------------------------------------------------------------------------
@@ -207,8 +225,8 @@ Get-ChildItem $dist -Filter *.zip | ForEach-Object { '  {0}  ({1:N0} KB)' -f $_.
 if (-not $Publish) { Write-Host "Not published (add -Publish to tag $tag and create the GitHub release)."; return }
 
 Step "Tagging $tag and creating the GitHub release"
-# (not `git describe`: with no tags yet it writes to stderr, which -ErrorAction Stop makes fatal)
-$previous = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1
+# Newest earlier version tag (not `git describe`, which writes to stderr when there are no tags).
+$previous = git tag --list 'v*' --sort=-v:refname | Where-Object { $_ -ne $tag } | Select-Object -First 1
 $range = if ($previous) { "$previous..HEAD" } else { 'HEAD' }
 $changes = (git log $range --no-merges --format='- %s') -join "`n"
 $notes = @"
@@ -219,7 +237,9 @@ $notes = @"
 ## Changes
 $changes
 "@
-git tag -a $tag -m "Expedition Helper $Version"
-git push origin $tag
-gh release create $tag $modZip $fullZip --title "Expedition Helper $Version" --notes $notes
-if ($LASTEXITCODE -ne 0) { throw 'gh release create failed (the tag was pushed; delete it or retry the release).' }
+if (-not $resume) {
+    Native { git tag -a $tag -m "Expedition Helper $Version" }
+    Native { git push origin $tag }
+}
+Native { gh release create $tag $modZip $fullZip --title "Expedition Helper $Version" --notes $notes }
+Step "Published: https://github.com/wslaghekke/tpm-expedition-helper/releases/tag/$tag"
