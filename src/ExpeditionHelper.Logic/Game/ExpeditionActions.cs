@@ -19,6 +19,13 @@ internal static class ExpeditionActions
         if (reward == null) return "expedition has no reward";
         if (moveToInventory && !reward.CanMoveToInventory) return $"'{reward.DisplayName}' can't be moved to inventory";
 
+        // Expert XP crates roll their amount in Calculate(), which the reward scene calls when it
+        // shows the crate; Claim then hands out _calculatedXP. Without the scene it stays 0 and the
+        // team gets nothing (verified: crate 0 -> 350 after Calculate, then +350 on claim).
+        // It's the only reward type with a Calculate step.
+        var xp = reward.TryCast<ExpeditionReward_ExpertXP.Instance>();
+        if (xp != null && xp._calculatedXP <= 0) xp.Calculate();
+
         GameEventsUtil.Raise(new GameEvent.ExpeditionEvent.RewardClaimed
         {
             Expedition = expedition,
