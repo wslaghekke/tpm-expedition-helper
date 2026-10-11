@@ -90,6 +90,7 @@ internal sealed class RepeatExpeditions
         if (!_settings.RepeatExpeditions.Value || plan.Type != EExpeditionType.Expedition) return;
 
         string why = GoalsReached(plan);
+        if (why == NoExhibits) { Log($"{plan.DisplayName}: no exhibits to collect here (materials/cash location), not repeating"); return; }
         if (why != null) { Stop(plan, why); return; }
         if (runsDone >= _settings.MaxRepeats.Value + 1)
         {
@@ -101,6 +102,8 @@ internal sealed class RepeatExpeditions
         Log($"{plan.DisplayName}: run {runsDone} done, repeat queued");
     }
 
+    private const string NoExhibits = "no exhibits to collect at this location";
+
     /// <summary>null while there's still something to get; otherwise the reason to stop.</summary>
     private string GoalsReached(ExpeditionPlan plan)
     {
@@ -109,8 +112,8 @@ internal sealed class RepeatExpeditions
 
         var goals = ExpeditionGoals.Evaluate(plan, _settings.CountInventoryTowardsKnowledge.Value);
         _lastGoals = goals;
+        if (goals.Exhibits.Count == 0) return NoExhibits;
         Log($"{plan.DisplayName}: {goals.Describe()}{(goals.PristinePossible ? "" : " — pristine can't drop at this survey level yet")}");
-        if (goals.Exhibits.Count == 0) return "no exhibits to collect at this location";
         bool done = (!wantPristine || goals.AllPristine) && (!wantKnowledge || goals.AllKnowledge);
         if (!done) return null;
         return wantPristine && wantKnowledge ? "pristine copies and max knowledge for every exhibit"
