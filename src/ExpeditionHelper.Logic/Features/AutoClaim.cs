@@ -8,8 +8,8 @@ namespace ExpeditionHelper.Logic.Features;
 /// <summary>
 /// Claims returned expedition crates without the reward scene when the exhibit inside is of a type
 /// the museum already has (the game's own `IsNewExhibit` flag is false): whole exhibits go straight
-/// to inventory, pieces of multi-part (shard) exhibits are attached. New discoveries and non-exhibit
-/// rewards are left for the player to open normally.
+/// to inventory, pieces of multi-part (shard) exhibits are attached; science materials and expert
+/// XP are claimed if enabled. New discoveries and other rewards are left for the player to open.
 ///
 /// Polls instead of hooking: a handful of expeditions checked twice a second is negligible and
 /// needs no native detour.
@@ -24,6 +24,7 @@ internal sealed class AutoClaim
     // Claims are processed by the game on a later frame (GameEvents queue), so an expedition stays
     // at stage Reward briefly after we raise its claim. Remember what we already claimed.
     private readonly HashSet<IntPtr> _claimed = new();
+    private readonly HashSet<IntPtr> _skipped = new(); // crates we decided to leave, logged once
 
     public AutoClaim(Settings settings) => _settings = settings;
 
@@ -46,13 +47,42 @@ internal sealed class AutoClaim
             if (_claimed.Contains(expedition.Pointer)) continue;
 
             string decision = Decide(expedition, out bool claim, out bool toInventory);
-            if (!claim) continue;
+            if (!claim)
+            {
+                if (_skipped.Add(expedition.Pointer)) Entry.Host.Log.LogInfo($"[auto-claim] left for you: {expedition.POI?.name} ({decision})");
+                continue;
+            }
 
             string result = ExpeditionActions.Claim(expedition, toInventory);
             _claimed.Add(expedition.Pointer);
             Entry.Host.Log.LogInfo($"[auto-claim] {result} ({decision})");
         }
         _claimed.IntersectWith(waiting); // forget expeditions the game has finished with
+        _skipped.IntersectWith(waiting);
+    }
+
+    /// <summary>
+    /// Non-exhibit rewards: their reward screen has a single claim button (same event with
+    /// MoveToInventory = false). Only the kinds enabled in the settings are claimed.
+    /// </summary>
+    private string DecideOther(IExpeditionRewardInstance reward, out bool claim)
+    {
+        claim = false;
+        // e.g. "TPS.Game.ExpeditionReward_ScienceMaterial+Instance"
+        string type = reward.Cast<Il2CppSystem.Object>().GetIl2CppType().FullName ?? "";
+        if (type.Contains("ExpeditionReward_ScienceMaterial"))
+        {
+            if (!_settings.AutoClaimMaterials.Value) return "materials (auto-claim off)";
+            claim = true;
+            return "science materials";
+        }
+        if (type.Contains("ExpeditionReward_ExpertXP"))
+        {
+            if (!_settings.AutoClaimExpertXP.Value) return "expert XP (auto-claim off)";
+            claim = true;
+            return "expert XP";
+        }
+        return $"not an exhibit ({type})";
     }
 
     /// <summary>Whether to auto-claim this crate, and a short human-readable reason.</summary>
@@ -62,8 +92,9 @@ internal sealed class AutoClaim
         toInventory = false;
 
         var reward = expedition.Rewards?.Count > 0 ? expedition.Rewards[0] : null;
-        var exhibit = reward?.TryCast<ExpeditionReward_Exhibit.Instance>();
-        if (exhibit == null) return "not an exhibit";
+        if (reward == null) return "no reward";
+        var exhibit = reward.TryCast<ExpeditionReward_Exhibit.Instance>();
+        if (exhibit == null) return DecideOther(reward, out claim);
         if (exhibit.IsNewExhibit) return "new discovery";
 
         var record = exhibit.ExhibitRecord;

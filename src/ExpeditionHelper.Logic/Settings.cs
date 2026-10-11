@@ -21,6 +21,8 @@ public sealed class Settings
     public ConfigEntry<bool> AutoOpenCrates { get; }
     public ConfigEntry<bool> SendKnownExhibitsToInventory { get; }
     public ConfigEntry<bool> AttachShards { get; }
+    public ConfigEntry<bool> AutoClaimMaterials { get; }
+    public ConfigEntry<bool> AutoClaimExpertXP { get; }
 
     // [Repeat]
     public ConfigEntry<bool> RepeatExpeditions { get; }
@@ -41,6 +43,11 @@ public sealed class Settings
             "When auto-opening, send exhibits of an already-unlocked type straight to inventory. New discoveries still show the normal reveal.");
         AttachShards = cfg.Bind("Expeditions", "AttachShards", true,
             "When auto-opening, attach pieces of multi-part (shard) exhibits you've already discovered, like the reward screen's \"Attach to Exhibit\".");
+
+        AutoClaimMaterials = cfg.Bind("Expeditions", "AutoClaimMaterials", true,
+            "When auto-opening, also claim crates with science materials.");
+        AutoClaimExpertXP = cfg.Bind("Expeditions", "AutoClaimExpertXP", true,
+            "When auto-opening, also claim crates with expert XP.");
 
         RepeatExpeditions = cfg.Bind("Repeat", "RepeatExpeditions", false,
             "Automatically send a finished expedition again (same location, team and cargo) until every enabled goal below is reached for ALL exhibits that location can drop.");
