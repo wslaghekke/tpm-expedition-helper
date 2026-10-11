@@ -20,9 +20,10 @@ namespace ExpeditionHelper.Logic.Game;
 /// its remaining fields from a real inbox definition — a default-constructed definition with
 /// empty fields crashed the game.
 ///
-/// The generic view doesn't show Message.Text (it shows placeholder text), and its button would
-/// invoke the null response callback, so we detour its Open (fill in text + button label) and
-/// InboxMessage.OnChoice (handle clicks on our messages ourselves).
+/// The generic view doesn't show Message.Text (it shows placeholder text, re-applied by I2
+/// Localize components), so the view's Open is detoured to fill in our text and button label. Its button
+/// would invoke the null response callback, so InboxMessage.OnChoice is detoured to handle clicks
+/// on our messages ourselves.
 /// </summary>
 internal sealed class InboxNotice
 {
@@ -93,7 +94,7 @@ internal sealed class InboxNotice
         _text = text;
         _message.Text = text;
         if (_openView != null && _openView.isOpen && _openView._textDescription != null)
-            _openView._textDescription.text = text;
+            SetText(_openView._textDescription, text);
     }
 
     public void Remove()
@@ -125,27 +126,38 @@ internal sealed class InboxNotice
 
     private static bool EnsureHooks()
     {
-        if (_openHook != null && _choiceHook != null) return true;
+        // Hook the base InboxMenu_Message.Open: the inbox menu calls it directly for generic views
+        // (a detour on the InboxMenu_Message_Generic.Open override was installed but not always
+        // reached), and the override also ends up in it.
         _openHook ??= NativeHook<OpenFn>.TryCreate(
-            typeof(InboxMenu_Message_Generic).GetMethod(nameof(InboxMenu_Message_Generic.Open)), OnOpen);
+            typeof(InboxMenu_Message).GetMethod(nameof(InboxMenu_Message.Open),
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly),
+            OnOpen);
         _choiceHook ??= NativeHook<OnChoiceFn>.TryCreate(
             typeof(InboxMessage).GetMethod(nameof(InboxMessage.OnChoice)), OnChoice);
         return _openHook != null && _choiceHook != null;
     }
 
+    /// <summary>
+    /// After an inbox message view's Open: if it's a generic view showing one of our messages, put
+    /// our text and button label in. The inbox may call Open on each view instance it prepares
+    /// (pending and current), so this can run a few times per message — harmless, it's idempotent.
+    /// </summary>
     private static void OnOpen(IntPtr self, IntPtr message, IntPtr method)
     {
         _openHook.Original(self, message, method);
         try
         {
             if (!Live.TryGetValue(message, out var notice)) return;
-            var view = new InboxMenu_Message_Generic(self);
+            var view = new InboxMenu_Message(self).TryCast<InboxMenu_Message_Generic>();
+            if (view == null) return;
             notice._openView = view;
-            if (view._textDescription != null) view._textDescription.text = notice._text;
-            if (notice._buttonLabel != null && view._buttons != null && view._buttons.Length > 0)
+            if (view._textDescription != null) SetText(view._textDescription, notice._text);
+            if (notice._buttonLabel != null && view._buttons != null && view._buttons.Length > 0 && view._buttons[0] != null)
             {
-                var label = view._buttons[0]?.GetComponentInChildren<TMPro.TMP_Text>();
-                if (label != null) label.text = notice._buttonLabel;
+                // The button has several labels (only one active, depending on input device).
+                foreach (var label in view._buttons[0].GetComponentsInChildren<TMPro.TMP_Text>(true))
+                    if (!string.IsNullOrEmpty(label.text)) SetText(label, notice._buttonLabel);
             }
         }
         catch (Exception e)
@@ -178,6 +190,13 @@ internal sealed class InboxNotice
     }
 
     // FindObjectOfType skips inactive objects, and the tray is hidden while the inbox menu is open.
+    private static void SetText(TMPro.TMP_Text text, string value)
+    {
+        var localize = text.GetComponent<I2.Loc.Localize>();
+        if (localize != null) localize.enabled = false;
+        text.text = value;
+    }
+
     private static InboxMessages Inbox()
     {
         foreach (var tray in UnityEngine.Resources.FindObjectsOfTypeAll<InboxTrayUI>())

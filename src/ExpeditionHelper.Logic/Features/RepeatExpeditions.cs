@@ -25,9 +25,13 @@ internal sealed class RepeatExpeditions
         public ExpeditionPlan Plan;
         public int Run;                 // runs completed so far in this chain
         public string LastWaitReason;   // wait reason with numbers stripped, to log changes of kind only
-        public bool WaitNotified;
-        public AdvisorNotice Notice;
+        public float WaitingSince = -1;
+        public string StillNeeded = "";  // goals summary from when the run finished
+        public InboxNotice Inbox;        // persistent "waiting" message, only for real waits
     }
+
+    /// <summary>Waits shorter than this for the helicopter to land don't get an inbox message.</summary>
+    private const float InboxAfterSeconds = 20f;
 
     private readonly Settings _settings;
     private float _nextPoll;
@@ -40,6 +44,7 @@ internal sealed class RepeatExpeditions
     private readonly List<Pending> _pending = new();
     // Last finished expedition per POI (kept even with repeating off), for manual repeats.
     private readonly Dictionary<long, ExpeditionPlan> _lastFinished = new();
+    private ExpeditionGoals _lastGoals;
 
     public RepeatExpeditions(Settings settings) => _settings = settings;
 
@@ -92,7 +97,7 @@ internal sealed class RepeatExpeditions
             Stop(plan, $"reached the limit of {max} repeat{(max == 1 ? "" : "s")}");
             return;
         }
-        _pending.Add(new Pending { Plan = plan, Run = runsDone });
+        _pending.Add(new Pending { Plan = plan, Run = runsDone, StillNeeded = _lastGoals?.StillNeeded() ?? "" });
         Log($"{plan.DisplayName}: run {runsDone} done, repeat queued");
     }
 
@@ -103,6 +108,7 @@ internal sealed class RepeatExpeditions
         if (!wantPristine && !wantKnowledge) return null; // no goals: only MaxRepeats stops it
 
         var goals = ExpeditionGoals.Evaluate(plan, _settings.CountInventoryTowardsKnowledge.Value);
+        _lastGoals = goals;
         Log($"{plan.DisplayName}: {goals.Describe()}{(goals.PristinePossible ? "" : " — pristine can't drop at this survey level yet")}");
         if (goals.Exhibits.Count == 0) return "no exhibits to collect at this location";
         bool done = (!wantPristine || goals.AllPristine) && (!wantKnowledge || goals.AllKnowledge);
@@ -133,19 +139,14 @@ internal sealed class RepeatExpeditions
             string kind = new string(wait.Where(c => !char.IsDigit(c) && c != '.' && c != ',' && c != '-').ToArray());
             if (kind != p.LastWaitReason) Log($"{plan.DisplayName}: waiting — {wait}");
             p.LastWaitReason = kind;
-            if (!p.WaitNotified)
-            {
-                p.WaitNotified = true;
-                p.Notice = Notify(NotifyKind.Waiting, $"Repeat waiting: {plan.DisplayName}", $"Waiting: {wait}.", "Cancel");
-                if (p.Notice != null) p.Notice.Clicked += _ => Drop(p, "cancelled");
-            }
+            UpdateWaitingInbox(p, wait);
             return;
         }
 
         int cost = settings.CalculateCost();
         ExpeditionManager.Instance.AddExpedition(settings);
         _pending.Remove(p);
-        p.Notice?.Close();
+        p.Inbox?.Remove();
         _chainRuns[poi] = p.Run;
         Log($"{plan.DisplayName}: sent again (run {p.Run + 1}, cost {cost:N0})");
         Notify(NotifyKind.Started, $"Expedition repeated: {plan.DisplayName}", $"Sent again with the same team (run {p.Run + 1}, cost {cost:N0}).");
@@ -189,10 +190,36 @@ internal sealed class RepeatExpeditions
         return null;
     }
 
+    /// <summary>
+    /// Keep one persistent inbox message per waiting repeat, with the current reason, once the wait
+    /// is more than the helicopter landing (another reason, or longer than InboxAfterSeconds).
+    /// </summary>
+    private void UpdateWaitingInbox(Pending p, string wait)
+    {
+        float now = UnityEngine.Time.unscaledTime;
+        if (p.WaitingSince < 0) p.WaitingSince = now;
+        bool realWait = !wait.StartsWith("the helicopter") || now - p.WaitingSince > InboxAfterSeconds;
+        if (!realWait || _settings.Notifications.Value != NotificationLevel.All) return;
+
+        string text = $"{p.Plan.DisplayName} will be sent again with the same team (run {p.Run + 1}) as soon as it can go.\n\n" +
+                      $"Waiting for: {wait}." +
+                      (string.IsNullOrEmpty(p.StillNeeded) ? "" : $"\n\nStill to get here: {p.StillNeeded}.");
+        if (p.Inbox == null || !p.Inbox.IsLive)
+        {
+            try
+            {
+                p.Inbox = InboxNotice.Send($"Repeat waiting: {p.Plan.DisplayName}", text, "Cancel repeat");
+                if (p.Inbox != null) p.Inbox.Clicked += () => Drop(p, "cancelled");
+            }
+            catch (Exception e) { Entry.Host.Log.LogError($"[repeat] inbox message failed: {e}"); }
+        }
+        else p.Inbox.SetText(text);
+    }
+
     private void Drop(Pending p, string reason)
     {
         _pending.Remove(p);
-        p.Notice?.Close();
+        p.Inbox?.Remove();
         if (reason != null) Stop(p.Plan, reason);
     }
 
@@ -202,7 +229,7 @@ internal sealed class RepeatExpeditions
         Notify(NotifyKind.Stopped, $"Repeat stopped: {plan.DisplayName}", $"Not repeating: {reason}.");
     }
 
-    private enum NotifyKind { Waiting, Started, Stopped }
+    private enum NotifyKind { Started, Stopped }
 
     private AdvisorNotice Notify(NotifyKind kind, string title, string text, string action = null)
     {
@@ -215,7 +242,7 @@ internal sealed class RepeatExpeditions
 
     private void Reset()
     {
-        foreach (var p in _pending) p.Notice?.Close();
+        foreach (var p in _pending) p.Inbox?.Remove();
         _pending.Clear();
         _live.Clear();
         _chainRuns.Clear();
@@ -259,6 +286,7 @@ internal sealed class RepeatExpeditions
         {
             var plan = ExpeditionPlan.From(kv.Value);
             var goals = ExpeditionGoals.Evaluate(plan, _settings.CountInventoryTowardsKnowledge.Value);
+        _lastGoals = goals;
             var settings = plan.BuildSettings(out string problem);
             int cost = settings?.CalculateCost() ?? -1;
             lines.Add($"{plan.DisplayName} (stage {kv.Value.Stage}, cargo {plan.CargoModule?.name ?? "none"}, alternate={goals.UsesAlternateRewards}, pristinePossible={goals.PristinePossible})");

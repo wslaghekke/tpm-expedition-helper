@@ -123,6 +123,18 @@ internal sealed class ExpeditionGoals
         return owned;
     }
 
+    /// <summary>What's still missing, e.g. "pristine Ol' Smack-a-Vole, knowledge for Shell Phone (2/3)".</summary>
+    public string StillNeeded()
+    {
+        var parts = new List<string>();
+        foreach (var e in Exhibits)
+        {
+            if (!e.PristineOwned) parts.Add($"pristine {e.Name}");
+            if (e.PotentialKnowledge < e.MaxKnowledge) parts.Add($"knowledge for {e.Name} ({e.PotentialKnowledge}/{e.MaxKnowledge})");
+        }
+        return string.Join(", ", parts);
+    }
+
     public string Describe() => string.Join(", ", Exhibits.Select(e =>
         $"{e.Name} [{(e.PristineOwned ? "pristine" : "no pristine")}, knowledge {e.Knowledge}" +
         (e.PotentialKnowledge > e.Knowledge ? $"(+{e.PotentialKnowledge - e.Knowledge} from inventory)" : "") + $"/{e.MaxKnowledge}]"));
