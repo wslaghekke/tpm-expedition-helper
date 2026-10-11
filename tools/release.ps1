@@ -241,5 +241,9 @@ if (-not $resume) {
     Native { git tag -a $tag -m "Expedition Helper $Version" }
     Native { git push origin $tag }
 }
-Native { gh release create $tag $modZip $fullZip --title "Expedition Helper $Version" --notes $notes }
+# Notes go through a file: Windows PowerShell mangles native arguments that contain quotes
+# (commit titles do), and its utf8 encoding adds a BOM that would show up in the release text.
+$notesFile = Join-Path $dist 'release-notes.md'
+[IO.File]::WriteAllText($notesFile, $notes, (New-Object Text.UTF8Encoding $false))
+Native { gh release create $tag $modZip $fullZip --title "Expedition Helper $Version" --notes-file $notesFile }
 Step "Published: https://github.com/wslaghekke/tpm-expedition-helper/releases/tag/$tag"
