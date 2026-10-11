@@ -207,7 +207,8 @@ Get-ChildItem $dist -Filter *.zip | ForEach-Object { '  {0}  ({1:N0} KB)' -f $_.
 if (-not $Publish) { Write-Host "Not published (add -Publish to tag $tag and create the GitHub release)."; return }
 
 Step "Tagging $tag and creating the GitHub release"
-$previous = git describe --tags --abbrev=0 2>$null
+# (not `git describe`: with no tags yet it writes to stderr, which -ErrorAction Stop makes fatal)
+$previous = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1
 $range = if ($previous) { "$previous..HEAD" } else { 'HEAD' }
 $changes = (git log $range --no-merges --format='- %s') -join "`n"
 $notes = @"
