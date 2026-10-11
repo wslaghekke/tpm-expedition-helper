@@ -1,22 +1,109 @@
-# Expedition Helper (Two Point Museum)
+# Expedition Helper for Two Point Museum
 
-BepInEx 6 (IL2CPP) mod that automates expeditions: auto-open reward crates, send exhibits of
-already-unlocked types to inventory, and repeat an expedition until the museum has a pristine
-copy and/or maxed knowledge.
+Less clicking, more collecting. Expedition Helper takes care of the repetitive part of
+expeditions:
+
+- **Opens returning crates for you.** Exhibits you've already discovered go straight to your
+  inventory, pieces of multi-part exhibits are attached, and science materials and expert XP are
+  claimed. New discoveries are left for you, so you still get the reveal.
+- **Repeats expeditions until you have everything.** Send an expedition once with "Repeat until
+  done" on, and it goes out again with the same team, approach and cargo until you own a
+  **pristine copy** and/or have **maxed knowledge** of every exhibit that location can drop.
+  Exhibits in your inventory that you could still analyse count towards knowledge.
+- **Looks after your money.** Repeats wait while you're making a loss, would dip below your cash
+  reserve, or couldn't cover the month-end wages and loans, and they wait out seasonal dangers your
+  team can't counter.
+- **Keeps you informed without nagging.** A waiting repeat leaves one message in your inbox saying
+  what it's waiting for (with a "Cancel repeat" button); short pop-ups tell you when a repeat is
+  sent or stops.
+
+Everything is configured in game: a new **Expedition Helper** tab in Settings, and a **Repeat
+until done** switch on each expedition's setup screen.
+
+## Requirements
+
+- Two Point Museum on **Windows** (Steam). Tested with game version 12.0.244617.
+- **BepInEx 6** (IL2CPP, build be.788). It's included in the "with BepInEx" download below.
 
 ## Install
 
-From the [releases](https://github.com/wslaghekke/tpm-expedition-helper/releases):
+1. Download a zip from the [latest release](https://github.com/wslaghekke/tpm-expedition-helper/releases/latest):
+   - **`ExpeditionHelper-<version>-with-BepInEx.zip`** if you don't have BepInEx yet (most people).
+   - **`ExpeditionHelper-<version>.zip`** if you already run BepInEx 6 be.788. Make sure
+     `BepInEx/config/BepInEx.cfg` has `UnityLogListening = false` under `[Logging]`, or the game
+     crashes on start.
+2. Open the game folder: in Steam, right-click Two Point Museum → *Manage* → *Browse local files*.
+3. Extract the zip into that folder, next to `TPM.exe`.
+4. Start the game. **The first start takes a few minutes** while BepInEx prepares itself (a
+   black or frozen-looking window is normal); later starts are quick.
 
-- `ExpeditionHelper-<version>-with-BepInEx.zip` — BepInEx 6 (IL2CPP be.788, LGPL, licenses
-  included) plus the mod. Extract into the game folder (next to `TPM.exe`); the first start takes
-  a few minutes while BepInEx generates its interop assemblies.
-- `ExpeditionHelper-<version>.zip` — the mod only, for an existing BepInEx 6 be.788 install.
-  `UnityLogListening = false` must be set under `[Logging]` in `BepInEx/config/BepInEx.cfg`, or
-  the game crashes on start (Denuvo, see below).
+To check it worked: open Settings in game; there should be an extra tab with a map icon.
 
-Settings are in game under Settings > Expedition Helper, and on each expedition's setup screen
-("Repeat until done").
+## Using it
+
+**Settings → Expedition Helper** (the tab with the map icon):
+
+| Setting | Default | What it does |
+|---|---|---|
+| Open crates automatically | Off | Claims returning crates for you, per the options below it. |
+| Send known exhibits to inventory | On | Exhibits you've discovered before go to inventory. New ones are left for you to open. |
+| Attach pieces of known exhibits | On | Pieces of multi-part exhibits are attached like "Attach to Exhibit" does. |
+| Claim science materials / expert XP | On | Also claims those crates. |
+| Repeat until done by default | Off | The starting value of the "Repeat until done" switch on the setup screen. |
+| Until a pristine copy is owned | On | Goal: a pristine copy of every exhibit the location can drop (placed or in inventory). |
+| Until knowledge is maxed | On | Goal: maximum knowledge of every exhibit there. |
+| Count inventory towards knowledge | On | Exhibits in your inventory that you could analyse count as knowledge you'll get. |
+| Wait out seasonal dangers | On | Holds a repeat while the trip would run into a seasonal danger your team can't counter. |
+| Maximum repeats in a row | 10 | Safety limit per expedition. |
+| Notifications | All | All / only when a repeat stops / none. |
+| Keep at least this much cash | 10,000 | Never pays for a repeat that would leave less than this. |
+| Only while the museum makes a profit | On | Waits while you're losing money. |
+| Keep month-end costs covered | On | Waits if paying would leave too little for wages and loan repayments. |
+
+**On the expedition setup screen**, under "Choose Cargo", the **Repeat until done** switch turns
+repeating on or off for that location, and the line below it shows what's still to get there.
+Exhibits you haven't discovered yet are only counted, never named. Locations that don't drop
+exhibits can't be repeated.
+
+Good to know:
+- A repeat starts once the helicopter has landed and the whole team is back and fit to go.
+- Pristine exhibits only drop once a location reaches its top survey level, which takes several
+  trips there. The status line tells you when that's not the case yet. The *Speedy* approach
+  doesn't raise the survey level; *Detailed* and the Survey Scanner cargo raise it fastest.
+- The per-location switches and running repeat chains reset when you quit the game. An expedition
+  that's out when you quit comes back normally; just send it again to start repeating.
+- Settings are also stored in `BepInEx/config/tpm.expeditionhelper.cfg`, if you'd rather edit
+  them in a text editor (changes apply while the game runs).
+
+## Uninstall
+
+Delete `BepInEx/plugins/ExpeditionHelper`. To remove BepInEx entirely, also delete `winhttp.dll`,
+`doorstop_config.ini`, `.doorstop_version` and the `BepInEx` and `dotnet` folders. The mod keeps
+its own state in memory and in its `.cfg` file, not in your saves; what it does in game (claiming
+crates, sending expeditions) are ordinary game actions.
+
+## Troubleshooting
+
+- **The game crashes on start:** check `UnityLogListening = false` in `BepInEx/config/BepInEx.cfg`.
+- **No Expedition Helper tab:** look in `BepInEx/LogOutput.log` for lines with `Expedition Helper`.
+  After a game update the mod may need an update too; it logs which parts it couldn't hook
+  instead of crashing.
+- Please report problems as a [GitHub issue](https://github.com/wslaghekke/tpm-expedition-helper/issues)
+  with your `BepInEx/LogOutput.log` attached.
+
+---
+
+# For developers
+
+## How it's built
+
+| Path | What |
+|---|---|
+| `src/ExpeditionHelper.Host` | Permanent BepInEx plugin. Hot-reloads the logic, forwards per-frame/config events, and (Debug only) runs the dev bridge. Changing it needs a game restart. |
+| `src/ExpeditionHelper.Logic` | All gameplay hooks and UI. Hot-reloaded: `dotnet build` drops it into `BepInEx/plugins/ExpeditionHelper/reload/` and the running game swaps it in. |
+| `tools/tpm` | CLI for the dev bridge (`ping`, `eval`, `reload`, `screenshot`, `log`). |
+| `tools/snippets/` | Reusable `tpm eval` probes. |
+| `tools/release.ps1` | Builds the release zips and (with `-Publish`) the GitHub release. |
 
 ## Building it yourself
 
@@ -36,42 +123,35 @@ The code compiles against the interop assemblies BepInEx generates from *your* c
    Add `-p:DeployToGame=false` to only build. A Debug build (the default) adds the dev bridge
    described below; don't hand those out.
 
-### Releasing
-
-`tools/release.ps1 -Version 1.2.3` builds Release and writes both zips to `dist/1.2.3/`
-(downloading BepInEx be.788 once, checked against its SHA-256, plus the license texts).
-`-Publish` additionally tags `v1.2.3`, pushes the tag and creates the GitHub release with `gh`.
-Bump `Plugin.Version` in `src/ExpeditionHelper.Host/Plugin.cs` and commit first; the script
-refuses a mismatch or a dirty tree. It runs locally rather than in GitHub Actions because the
-build needs the game's interop assemblies.
-
-## Layout
-
-| Path | What |
-|---|---|
-| `src/ExpeditionHelper.Host` | Permanent BepInEx plugin. Hot-reloads the logic, forwards per-frame/config events, and (Debug only) runs the dev bridge. Changing it needs a game restart. |
-| `src/ExpeditionHelper.Logic` | All gameplay hooks and UI. Hot-reloaded: `dotnet build` drops it into `BepInEx/plugins/ExpeditionHelper/reload/` and the running game swaps it in. |
-| `tools/tpm` | CLI for the dev bridge (`ping`, `eval`, `reload`, `screenshot`, `log`). |
-| `tools/release.ps1` | Builds the release zips and (with `-Publish`) the GitHub release. |
-
-Game path defaults to `F:\SteamLibrary\steamapps\common\Two Point Museum`; override it in a
-`Directory.Build.user.props` (`<GameDir>…</GameDir>`).
-
 ## Dev loop
 
 ```bash
-dotnet build src/ExpeditionHelper.Logic   # game picks it up within ~1s
+dotnet build src/ExpeditionHelper.Logic   # the running game picks it up within ~1s
 tools/tpm eval 'UnityEngine.Time.timeScale'
 ```
 
-Settings: `BepInEx/config/tpm.expeditionhelper.cfg` — edits apply live.
+Needs a game restart: any change to `ExpeditionHelper.Host` (the game locks the dll; the build
+warns and skips deploy), and every game update (BepInEx regenerates interop on the next launch).
 
-### Needs a game restart
+### Dev bridge
 
-- any change to `ExpeditionHelper.Host` (the game locks the dll; the build warns and skips deploy)
-- after a game update (BepInEx regenerates interop on the next launch)
+Debug builds of the host listen on `127.0.0.1:27185`. Every request needs the token from
+`BepInEx/config/ExpeditionHelper.devtoken` (regenerated each launch) in an `X-Token` header;
+`tools/tpm` handles that. `/eval` executes arbitrary C# on the game's main thread, so Release
+builds compile the bridge out. See `CLAUDE.md` for the details.
 
-### Denuvo constraint
+### Releasing
+
+`tools/release.ps1 -Version 1.2.3` builds Release and writes both zips to `dist/1.2.3/`
+(downloading BepInEx be.788 once, checked against its SHA-256, plus the license texts of
+everything bundled with it). `-Publish` additionally tags `v1.2.3`, pushes the tag and creates the
+GitHub release with `gh`. Bump `Plugin.Version` in `src/ExpeditionHelper.Host/Plugin.cs` and commit
+first; the script refuses a mismatch or a dirty tree. It runs locally rather than in GitHub
+Actions because the build needs the game's interop assemblies.
+
+## Constraints and gotchas
+
+### Denuvo
 
 The Windows build ships Denuvo Anti-Tamper, which obfuscates the il2cpp runtime internals that
 Il2CppInterop's `ClassInjector` hooks (`GenericMethod::GetMethod` etc.). Therefore:
@@ -98,7 +178,8 @@ Raise game events with `GameEventsUtil.Raise(evt)`, never the generated `GameEve
 
 We can't create MonoBehaviours or hand delegates to the game's widgets, so UI is built from clones
 of the game's own objects (`Object.Instantiate`) and their clicks are caught with detours on the
-widget classes, matched against our instances' pointers (see `SettingsMenuTab`, `InboxNotice`).
+widget classes, matched against our instances' pointers (see `SettingsMenuTab`, `UiClicks`,
+`InboxNotice`). Widgets a screen doesn't have come from the Settings menu prefab (`UiTemplates`).
 Gotchas found so far:
 - disable a cloned label's I2 `Localize` component(s) before setting text (`UiText.Set`);
 - a cloned nested Canvas/GraphicRaycaster gets clicks but not the game's tooltip hover check —
@@ -114,13 +195,7 @@ Gotchas found so far:
 - subscribe to `Host.Update` / `Host.ConfigChanged`
 - hooks via `NativeHook` (auto-removed on unload); destroy any GameObjects you create in `Entry.Unload`
 
-## Dev bridge
-
-Debug builds of the host listen on `127.0.0.1:27185`. Every request needs the token from
-`BepInEx/config/ExpeditionHelper.devtoken` (regenerated each launch) in an `X-Token` header.
-`/eval` executes arbitrary C# in the game process, so Release builds compile it out.
-
-## Build notes
+### Build notes
 
 Nullable reference types are disabled and reference-type `?` annotations must not be used: the
 interop'd `UnityEngine.CoreModule` exposes public copies of `NullableAttribute` & co. that the
