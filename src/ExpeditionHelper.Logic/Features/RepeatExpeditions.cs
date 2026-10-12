@@ -10,7 +10,8 @@ namespace ExpeditionHelper.Logic.Features;
 /// <summary>
 /// Re-sends a finished expedition (same location, team, approach and cargo) until the enabled
 /// goals are reached for every exhibit it can drop, or, if a perk was picked for the location on
-/// the setup screen, until a crate brings that perk back.
+/// the setup screen, until a crate brings that perk back, or, with a stock target picked, until
+/// the player has that much of the material.
 ///
 /// Lifecycle per location: the crate is waiting (stage Reward) → we snapshot the expedition, since
 /// the game removes it once claimed → it disappears (claimed) → evaluate goals → queue a repeat →
@@ -137,12 +138,19 @@ internal sealed class RepeatExpeditions
         // runsDone == 1: the player sent it and the mod never repeated it — log only, no notification.
         bool repeatedByUs = runsDone > 1;
         long perk = RepeatChoices.Perk(plan.Poi.ID);
+        var stock = RepeatChoices.Stock(plan.Poi.ID);
         string why;
         if (perk != 0)
         {
             why = PerkReached(live, perk);
             // Got it: forget the pick, so the next trip here doesn't go after another copy.
             if (live.Perks.Contains(perk)) RepeatChoices.SetPerk(plan.Poi.ID, 0);
+        }
+        else if (stock.Material != 0)
+        {
+            why = StockReached(plan, stock.Material, stock.Amount);
+            // Reached: forget the target, so the next trip here runs once unless a new one is picked.
+            if (MaterialRewards.Stock(stock.Material) >= stock.Amount) RepeatChoices.SetStock(plan.Poi.ID, 0, 0);
         }
         else
         {
@@ -157,6 +165,7 @@ internal sealed class RepeatExpeditions
             return;
         }
         string stillNeeded = perk != 0 ? $"the perk {PerkRewards.Shown(plan.Poi, perk)}"
+            : stock.Material != 0 ? $"{stock.Amount:N0} {MaterialRewards.Name(stock.Material)} (have {MaterialRewards.Stock(stock.Material):N0})"
             : _lastGoals?.StillNeeded(_settings.UntilPristine.Value, _settings.UntilMaxKnowledge.Value) ?? "";
         _pending.Add(new Pending { Plan = plan, Run = runsDone, StillNeeded = stillNeeded });
         Log($"{plan.DisplayName}: run {runsDone} done, repeat queued");
@@ -177,6 +186,17 @@ internal sealed class RepeatExpeditions
         string shown = PerkRewards.Shown(plan.Poi, perk);
         if (live.Perks.Contains(perk)) return $"got the perk {shown}";
         if (option == null) return $"{shown} can't drop here with this cargo";
+        return null;
+    }
+
+    /// <summary>The stock goal: null while there's less than `amount` of the material; otherwise the reason to stop.</summary>
+    private static string StockReached(ExpeditionPlan plan, long material, int amount)
+    {
+        string name = MaterialRewards.Name(material);
+        int have = MaterialRewards.Stock(material);
+        Log($"{plan.DisplayName}: {name} in stock {have:N0}, target {amount:N0}");
+        if (have >= amount) return $"you have {have:N0} {name}";
+        if (!MaterialRewards.For(plan).Any(m => m.Id == material)) return $"{name} can't drop here with this cargo";
         return null;
     }
 
@@ -375,6 +395,9 @@ internal sealed class RepeatExpeditions
             long target = RepeatChoices.Perk(plan.Poi.ID);
             lines.Add($"  perks: {string.Join(", ", PerkRewards.For(plan).Select(o => $"{o.Name} (level {o.UnlockLevel}{(o.Available ? "" : ", not yet")})"))}" +
                       $"; in crate: {string.Join(", ", PerkRewards.InCrate(kv.Value).Select(PerkRewards.Name))}; target: {(target == 0 ? "none" : PerkRewards.Name(target))}");
+            var stockGoal = RepeatChoices.Stock(plan.Poi.ID);
+            lines.Add($"  materials: {string.Join(", ", MaterialRewards.For(plan).Select(m => $"{m.Name} {m.Stock} (step {m.Step})"))}" +
+                      $"; stock target: {(stockGoal.Material == 0 ? "none" : $"{stockGoal.Amount} {MaterialRewards.Name(stockGoal.Material)}")}");
             lines.Add($"  hard stop: {HardStopReason(plan) ?? "none"}; wait: {WaitReason(plan) ?? "none"}; build settings: {problem ?? "ok"}");
             lines.Add($"  seasonal: {(settings == null ? "n/a" : SeasonalDangers.Uncountered(settings) ?? "no uncountered dangers")}");
             lines.Add($"  cost {cost:N0}; money: {(cost >= 0 ? MoneyCheck.WhyNotAffordable(cost, _settings) ?? "ok" : "n/a")}; bills {MoneyCheck.MonthEndBills():N0}; projected profit {MoneyCheck.ProjectedProfit():N0}");

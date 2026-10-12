@@ -66,8 +66,15 @@ Exhibits you haven't discovered yet are only counted, never named.
 
 At locations that can drop perks, **Repeat for perk** lets you pick one: the expedition then
 repeats until a crate brings that perk back, instead of using the exhibit goals. Picking a perk
-turns repeating on; once the perk has come back, the choice goes back to "None". Perks that need a higher survey level are marked in the list. Locations that
-drop neither exhibits nor perks can't be repeated.
+turns repeating on; once the perk has come back, the choice goes back to "None". Perks that need
+a higher survey level are marked in the list.
+
+At locations that drop science materials (Metal, Whirlicogs, Golden Truffles, ...), **Repeat until
+in stock** works the same way with a target amount: the expedition repeats until you have that
+much. The targets on offer go in steps that suit the material (1 Golden Truffle, 100 Metal) and
+start above what you have. Auto-open's "Claim science materials" option keeps these chains going
+without you opening each crate. Locations that drop no exhibits, perks or materials (cash
+locations) can't be repeated.
 
 **Last team**, next to Auto-fill, puts the team and cargo you last sent to that location back,
 whichever helipad you're sending from. Team members who can't go right now (still away,

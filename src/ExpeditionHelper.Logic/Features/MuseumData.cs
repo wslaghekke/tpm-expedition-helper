@@ -17,6 +17,7 @@ namespace ExpeditionHelper.Logic.Features;
 /// File format, one entry per line ("#" lines are comments):
 ///   repeat &lt;poi&gt; on|off
 ///   perk &lt;poi&gt; &lt;perk id&gt;
+///   stock &lt;poi&gt; &lt;material id&gt; &lt;amount&gt;
 ///   team &lt;poi&gt; &lt;cargo id&gt; &lt;staff id&gt;,&lt;staff id&gt;,...
 /// </summary>
 internal static class MuseumData

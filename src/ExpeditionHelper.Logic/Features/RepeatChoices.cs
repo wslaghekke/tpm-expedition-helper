@@ -5,13 +5,15 @@ namespace ExpeditionHelper.Logic.Features;
 
 /// <summary>
 /// Whether to repeat expeditions to a location: the player's choice on the setup screen, or the
-/// global default from the settings; and the perk to repeat for, if one was picked.
+/// global default from the settings; and the goal picked instead of the exhibit goals, if any:
+/// a perk, or a stock target for a material (one or the other).
 /// Stored per museum by <see cref="MuseumData"/>.
 /// </summary>
 internal static class RepeatChoices
 {
     private static readonly Dictionary<long, bool> ByPoi = new();
     private static readonly Dictionary<long, long> PerkByPoi = new();
+    private static readonly Dictionary<long, (long Material, int Amount)> StockByPoi = new();
 
     public static bool IsOn(Settings settings, long poi) =>
         ByPoi.TryGetValue(poi, out bool on) ? on : settings.RepeatExpeditions.Value;
@@ -43,20 +45,39 @@ internal static class RepeatChoices
         MuseumData.Changed();
     }
 
+    /// <summary>The material and amount to repeat for at this location; Material 0 for none.</summary>
+    public static (long Material, int Amount) Stock(long poi) => StockByPoi.TryGetValue(poi, out var stock) ? stock : (0, 0);
+
+    public static void SetStock(long poi, long material, int amount)
+    {
+        if (Stock(poi) == (material, amount)) return;
+        if (material == 0 || amount <= 0) StockByPoi.Remove(poi);
+        else StockByPoi[poi] = (material, amount);
+        MuseumData.Changed();
+    }
+
     public static void Clear()
     {
         ByPoi.Clear();
         PerkByPoi.Clear();
+        StockByPoi.Clear();
     }
 
     public static IEnumerable<string> Save() =>
         ByPoi.Where(kv => kv.Value != Entry.Settings.RepeatExpeditions.Value) // the default may have changed since
             .Select(kv => $"repeat {kv.Key} {(kv.Value ? "on" : "off")}")
-            .Concat(PerkByPoi.Select(kv => $"perk {kv.Key} {kv.Value}"));
+            .Concat(PerkByPoi.Select(kv => $"perk {kv.Key} {kv.Value}"))
+            .Concat(StockByPoi.Select(kv => $"stock {kv.Key} {kv.Value.Material} {kv.Value.Amount}"));
 
     /// <summary>Take one stored line (split on spaces) if it's ours.</summary>
     public static bool Load(string[] parts)
     {
+        if (parts.Length == 4 && parts[0] == "stock" && long.TryParse(parts[1], out long stockPoi)
+            && long.TryParse(parts[2], out long material) && int.TryParse(parts[3], out int amount) && material != 0 && amount > 0)
+        {
+            StockByPoi[stockPoi] = (material, amount);
+            return true;
+        }
         if (parts.Length != 3 || !long.TryParse(parts[1], out long poi)) return false;
         if (parts[0] == "repeat" && parts[2] is "on" or "off")
         {

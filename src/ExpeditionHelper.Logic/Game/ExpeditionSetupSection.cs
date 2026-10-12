@@ -9,7 +9,7 @@ namespace ExpeditionHelper.Logic.Game;
 
 /// <summary>
 /// A section of our own on the expedition setup screen (ExpeditionMenu_Setup_V2), below
-/// "Choose Cargo": a header cloned from the cargo header, an On/Off toggle row and a perk
+/// "Choose Cargo": a header cloned from the cargo header, an On/Off toggle row and a goal (perk/stock)
 /// dropdown row (both cloned from the Settings menu, see <see cref="UiTemplates"/>) and a status text.
 ///
 /// Injected in a detour on the setup screen's OpenMenu; clicks come through <see cref="UiClicks"/>,
@@ -35,9 +35,10 @@ internal static class ExpeditionSetupSection
         public IntPtr Button;      // the toggle's clickable area
         public TMPro.TMP_Text Status;
         public UnityEngine.UI.LayoutElement StatusLayout;
-        public GameObject PerkRow;        // null if the dropdown template wasn't available
-        public TMPro.TMP_Dropdown PerkDropdown;
-        public string[] PerkOptions;
+        public GameObject GoalRow;        // null if the dropdown template wasn't available
+        public TMPro.TMP_Dropdown GoalDropdown;
+        public string[] GoalOptions;
+        public TMPro.TMP_Text GoalLabel;
         public TPS.Core.UI.UIButton LastTeam; // copy of Auto-fill; null if that wasn't available
         public GameObject TeamRow;           // holds Auto-fill and Last team side by side
     }
@@ -45,8 +46,8 @@ internal static class ExpeditionSetupSection
     /// <summary>Raised when the player flips the toggle, with its new value.</summary>
     public static event Action<bool> Toggled;
 
-    /// <summary>Raised when the player picks an entry in the perk dropdown, with its index.</summary>
-    public static event Action<int> PerkChosen;
+    /// <summary>Raised when the player picks an entry in the goal dropdown, with its index.</summary>
+    public static event Action<int> GoalChosen;
 
     /// <summary>Raised when the player clicks the "Last team" button.</summary>
     public static event Action LastTeamClicked;
@@ -81,7 +82,7 @@ internal static class ExpeditionSetupSection
         var cur = _current;
         _current = null;
         Toggled = null;
-        PerkChosen = null;
+        GoalChosen = null;
         LastTeamClicked = null;
         _openMenuHook = null; // disposed by Hooks.DisposeAll
         if (cur != null) RemoveTeamRow(cur.Menu);
@@ -125,31 +126,32 @@ internal static class ExpeditionSetupSection
         }
     }
 
-    /// <summary>The perk dropdown: hidden when `options` is null or empty, else showing options[index].</summary>
-    public static void SetPerks(string[] options, int index, bool enabled)
+    /// <summary>The goal dropdown: hidden when `options` is null or empty, else titled `label` and showing options[index].</summary>
+    public static void SetGoals(string label, string[] options, int index, bool enabled)
     {
         var cur = _current;
-        if (cur == null || cur.Root == null || cur.PerkRow == null) return;
+        if (cur == null || cur.Root == null || cur.GoalRow == null) return;
         bool visible = options != null && options.Length > 0;
-        if (cur.PerkRow.activeSelf != visible) cur.PerkRow.SetActive(visible);
+        if (cur.GoalRow.activeSelf != visible) cur.GoalRow.SetActive(visible);
         if (!visible) return;
-        if (cur.PerkOptions == null || !System.Linq.Enumerable.SequenceEqual(cur.PerkOptions, options))
+        if (cur.GoalLabel != null && cur.GoalLabel.text != label) cur.GoalLabel.text = label;
+        if (cur.GoalOptions == null || !System.Linq.Enumerable.SequenceEqual(cur.GoalOptions, options))
         {
-            cur.PerkOptions = options;
-            cur.PerkDropdown.ClearOptions();
+            cur.GoalOptions = options;
+            cur.GoalDropdown.ClearOptions();
             var list = new Il2CppSystem.Collections.Generic.List<string>();
             foreach (var o in options) list.Add(o);
-            cur.PerkDropdown.AddOptions(list);
+            cur.GoalDropdown.AddOptions(list);
         }
-        if (cur.PerkDropdown.value != index) cur.PerkDropdown.SetValueWithoutNotify(index);
-        if (cur.PerkDropdown.interactable != enabled) cur.PerkDropdown.interactable = enabled;
+        if (cur.GoalDropdown.value != index) cur.GoalDropdown.SetValueWithoutNotify(index);
+        if (cur.GoalDropdown.interactable != enabled) cur.GoalDropdown.interactable = enabled;
     }
 
     private static void OnDropdownSelected(IntPtr dropdown)
     {
         var cur = _current;
-        if (cur?.PerkDropdown == null || cur.PerkRow == null || dropdown != cur.PerkDropdown.Pointer) return;
-        PerkChosen?.Invoke(cur.PerkDropdown.value);
+        if (cur?.GoalDropdown == null || cur.GoalRow == null || dropdown != cur.GoalDropdown.Pointer) return;
+        GoalChosen?.Invoke(cur.GoalDropdown.value);
     }
 
     private static void OnOpenMenu(IntPtr self, IntPtr settings, IntPtr eventsMenu, IntPtr teamSelectMenu,
@@ -213,7 +215,7 @@ internal static class ExpeditionSetupSection
         var toggle = toggleRow.GetComponent<WidgetToggleSlider>();
         toggle.OnValueChanged = new UnityEngine.Events.UnityEvent<bool>(); // no copied listeners
 
-        var (perkRow, perkDropdown) = AddPerkRow(root.transform);
+        var (goalRow, goalDropdown, goalLabel) = AddGoalRow(root.transform);
 
         // Status text: a copy of the label, smaller and wrapping.
         var statusRow = NewRow(root.transform, "rowStatus", 60);
@@ -238,8 +240,9 @@ internal static class ExpeditionSetupSection
             Button = toggle._button != null ? toggle._button.Pointer : IntPtr.Zero,
             Status = status,
             StatusLayout = statusRow.GetComponent<UnityEngine.UI.LayoutElement>(),
-            PerkRow = perkRow,
-            PerkDropdown = perkDropdown,
+            GoalRow = goalRow,
+            GoalDropdown = goalDropdown,
+            GoalLabel = goalLabel,
         };
         (_current.LastTeam, _current.TeamRow) = AddLastTeamButton(menu);
     }
@@ -305,17 +308,17 @@ internal static class ExpeditionSetupSection
         Remove(row.gameObject);
     }
 
-    /// <summary>"Repeat for perk" + dropdown, fitted like the toggle row; hidden until <see cref="SetPerks"/> shows it.</summary>
-    private static (GameObject, TMPro.TMP_Dropdown) AddPerkRow(Transform section)
+    /// <summary>A label ("Repeat for perk" etc.) + dropdown, fitted like the toggle row; hidden until <see cref="SetGoals"/> shows it.</summary>
+    private static (GameObject, TMPro.TMP_Dropdown, TMPro.TMP_Text) AddGoalRow(Transform section)
     {
         var template = UiTemplates.DropdownRow();
-        if (template == null) { Entry.Host.Log.LogError("[setup] no dropdown template; perk choice unavailable"); return (null, null); }
+        if (template == null) { Entry.Host.Log.LogError("[setup] no dropdown template; perk/stock choice unavailable"); return (null, null, null); }
 
         // Label on its own line with the dropdown below it at full width: next to each other there's
-        // no room for perk names in this narrow panel.
-        var row = NewRow(section, "rowPerk", 190);
+        // no room for perk and material names in this narrow panel.
+        var row = NewRow(section, "rowGoal", 190);
         var dropdownRow = UnityEngine.Object.Instantiate(template, row.transform);
-        dropdownRow.name = "dropdownPerk";
+        dropdownRow.name = "dropdownGoal";
         dropdownRow.SetActive(true);
         var rt = dropdownRow.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0, 0.5f);
@@ -337,7 +340,7 @@ internal static class ExpeditionSetupSection
         var dropdown = dropdownRow.GetComponentInChildren<TMPro.TMP_Dropdown>(true);
         dropdown.onValueChanged = new TMPro.TMP_Dropdown.DropdownEvent(); // no copied listeners
         row.SetActive(false);
-        return (row, dropdown);
+        return (row, dropdown, label);
     }
 
     /// <summary>Stretch a child across its parent's width (24 px margins), at its top (anchorY 1) or bottom (0).</summary>
