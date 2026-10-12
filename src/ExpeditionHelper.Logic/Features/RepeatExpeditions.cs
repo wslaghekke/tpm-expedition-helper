@@ -57,6 +57,9 @@ internal sealed class RepeatExpeditions
     private readonly Dictionary<long, ExpeditionPlan> _lastFinished = new();
     private ExpeditionGoals _lastGoals;
     private string _museum; // MuseumData key of the museum the state above belongs to
+    // Helipad id -> when its helicopter was first seen Idle (since it last wasn't).
+    private readonly Dictionary<long, float> _idleSince = new();
+    private const float HelicopterSettleSeconds = 2f; // game time
 
     public RepeatExpeditions(Settings settings)
     {
@@ -266,7 +269,7 @@ internal sealed class RepeatExpeditions
     }
 
     /// <summary>Temporary conditions: keep waiting.</summary>
-    private static string WaitReason(ExpeditionPlan plan)
+    private string WaitReason(ExpeditionPlan plan)
     {
         var manager = ExpeditionManager.Instance;
         if (manager.TryGetExpeditionForItem(plan.Helipad, out _)) return "the helipad is in use";
@@ -275,7 +278,14 @@ internal sealed class RepeatExpeditions
         if (em.HasComponent<ECExpeditionItem>(helipad.Entity))
         {
             var state = em.GetComponentData<ECExpeditionItem>(helipad.Entity).State;
-            if (state != EExpeditionItemState.Idle) return $"the helicopter is still busy ({state})";
+            if (state != EExpeditionItemState.Idle) { _idleSince.Remove(plan.Helipad.ID); return $"the helicopter is still busy ({state})"; }
+            // After dropping the team off the helicopter is Idle for a moment (~0.7 s game time)
+            // before it hovers and lands. A trip sent then came back before it had landed, and the
+            // helicopter never dropped that team off (it hovered forever). Only a settled Idle
+            // counts; game time, so a paused game doesn't count as settled.
+            float now = UnityEngine.Time.time;
+            if (!_idleSince.TryGetValue(plan.Helipad.ID, out float since)) _idleSince[plan.Helipad.ID] = since = now;
+            if (now - since < HelicopterSettleSeconds) return "the helicopter is still busy (landing)";
         }
 
         var poiDef = plan.PoiDefinition;
@@ -347,6 +357,7 @@ internal sealed class RepeatExpeditions
         _live.Clear();
         _chainRuns.Clear();
         _lastFinished.Clear();
+        _idleSince.Clear();
     }
 
     /// <summary>

@@ -1,16 +1,18 @@
-// State of the expedition helipads (ECExpeditionItem on the item's entity).
+// Read-only: every expedition helipad in the loaded museum (entities with ECExpeditionItem):
+// helicopter state and animation time, and the expedition using it, if any.
 var sb = new System.Text.StringBuilder();
-foreach (long raw in new long[] { 37997, 38005 })
+var em = Unity.Entities.World.DefaultGameObjectInjectionWorld.EntityManager;
+var query = em.CreateEntityQuery(new Unity.Entities.ComponentType[] { Unity.Entities.ComponentType.ReadOnly<TPS.Game.ECExpeditionItem>() });
+var entities = query.ToEntityArray(Unity.Collections.Allocator.Temp);
+var manager = TPS.Game.ExpeditionManager.Instance;
+for (int i = 0; i < entities.Length; i++)
 {
-    var id = new TPS.Game.GameItemInstanceID(raw);
-    if (!id.TryGet(out var item)) { sb.AppendLine($"{raw}: not found"); continue; }
-    var entityProp = item.GetType().GetProperty("Entity");
-    sb.AppendLine($"{raw}: {item.GetIl2CppType().Name} '{item.ToString()}' entityProp={(entityProp == null ? "none" : entityProp.PropertyType.FullName)}");
-    if (entityProp == null) continue;
-    var entity = (Unity.Entities.Entity)entityProp.GetValue(item);
-    var em = Unity.Entities.World.DefaultGameObjectInjectionWorld.EntityManager;
-    bool has = em.HasComponent<TPS.Game.ECExpeditionItem>(entity);
-    sb.AppendLine($"   entity={entity} hasECExpeditionItem={has}");
-    if (has) { var c = em.GetComponentData<TPS.Game.ECExpeditionItem>(entity); sb.AppendLine($"   state={c.State} anim={c.AnimationTime:F2} item={c.Item}"); }
+    var c = em.GetComponentData<TPS.Game.ECExpeditionItem>(entities[i]);
+    string exp = manager.TryGetExpeditionForItem(c.Item, out var e)
+        ? $"{e.POI?.name} stage {e.Stage}" : "no expedition";
+    sb.AppendLine($"helipad {c.Item.ID}: state={c.State} anim={c.AnimationTime:F1} — {exp}");
 }
+entities.Dispose();
+foreach (var kv in manager._expeditions)
+    sb.AppendLine($"expedition {kv.Value.POI?.name}: stage {kv.Value.Stage}, helipad {kv.Value.ItemID.ID}");
 return sb.ToString();
