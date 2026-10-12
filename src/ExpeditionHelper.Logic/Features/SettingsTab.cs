@@ -33,6 +33,7 @@ internal static class SettingsTab
         Toggle(page, "Attach pieces of known exhibits", s.AttachShards, AutoOpen);
         Toggle(page, "Claim science materials", s.AutoClaimMaterials, AutoOpen);
         Toggle(page, "Claim expert XP", s.AutoClaimExpertXP, AutoOpen);
+        Toggle(page, "Claim perks", s.AutoClaimPerks, AutoOpen);
 
         page.Header("Repeat expeditions");
         Toggle(page, "Repeat until done by default", s.RepeatExpeditions);

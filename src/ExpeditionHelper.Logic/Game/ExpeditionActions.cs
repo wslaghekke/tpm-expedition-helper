@@ -1,3 +1,4 @@
+using System;
 using TPS.Game;
 
 namespace ExpeditionHelper.Logic.Game;
@@ -5,6 +6,11 @@ namespace ExpeditionHelper.Logic.Game;
 /// <summary>Actions on expeditions, done the same way the game's own UI does them.</summary>
 internal static class ExpeditionActions
 {
+    /// <summary>Raised when <see cref="Claim"/> has raised a claim (before the game processes it).</summary>
+    public static event Action<Expedition> Claimed;
+
+    public static void Reset() => Claimed = null;
+
     /// <summary>
     /// Claim a returned expedition's crate without the reward scene. The reward scene's claim
     /// buttons end in TransitionBackToLevel, which raises RewardClaimed; ExpeditionManager.OnRewardClaimed
@@ -32,6 +38,8 @@ internal static class ExpeditionActions
             Reward = reward,
             MoveToInventory = moveToInventory,
         });
+        try { Claimed?.Invoke(expedition); }
+        catch (Exception e) { Entry.Host.Log.LogError($"[claim] Claimed handler failed: {e}"); }
         return moveToInventory
             ? $"sent '{reward.DisplayName}' from {expedition.POI?.name} to inventory"
             : $"claimed '{reward.DisplayName}' from {expedition.POI?.name} ({reward.ClaimButtonText})";

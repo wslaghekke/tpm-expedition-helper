@@ -9,10 +9,11 @@ namespace ExpeditionHelper.Logic.Game;
 
 /// <summary>
 /// A section of our own on the expedition setup screen (ExpeditionMenu_Setup_V2), below
-/// "Choose Cargo": a header cloned from the cargo header, an On/Off toggle row (cloned from the
-/// Settings menu, see <see cref="UiTemplates"/>) and a status text.
+/// "Choose Cargo": a header cloned from the cargo header, an On/Off toggle row and a perk
+/// dropdown row (both cloned from the Settings menu, see <see cref="UiTemplates"/>) and a status text.
 ///
-/// Injected in a detour on the setup screen's OpenMenu; clicks come through <see cref="UiClicks"/>.
+/// Injected in a detour on the setup screen's OpenMenu; clicks come through <see cref="UiClicks"/>,
+/// dropdown choices through <see cref="UiDropdowns"/>.
 /// </summary>
 internal static class ExpeditionSetupSection
 {
@@ -34,10 +35,21 @@ internal static class ExpeditionSetupSection
         public IntPtr Button;      // the toggle's clickable area
         public TMPro.TMP_Text Status;
         public UnityEngine.UI.LayoutElement StatusLayout;
+        public GameObject PerkRow;        // null if the dropdown template wasn't available
+        public TMPro.TMP_Dropdown PerkDropdown;
+        public string[] PerkOptions;
+        public TPS.Core.UI.UIButton LastTeam; // copy of Auto-fill; null if that wasn't available
+        public GameObject TeamRow;           // holds Auto-fill and Last team side by side
     }
 
     /// <summary>Raised when the player flips the toggle, with its new value.</summary>
     public static event Action<bool> Toggled;
+
+    /// <summary>Raised when the player picks an entry in the perk dropdown, with its index.</summary>
+    public static event Action<int> PerkChosen;
+
+    /// <summary>Raised when the player clicks the "Last team" button.</summary>
+    public static event Action LastTeamClicked;
 
     /// <summary>The open setup screen showing our section, or null.</summary>
     public static ExpeditionMenu_Setup_V2 OpenMenu
@@ -57,6 +69,7 @@ internal static class ExpeditionSetupSection
         _openMenuHook = NativeHook<OpenMenuFn>.TryCreate(typeof(ExpeditionMenu_Setup_V2).GetMethod(nameof(ExpeditionMenu_Setup_V2.OpenMenu), f), OnOpenMenu);
         if (_openMenuHook == null || !UiClicks.Install()) return false;
         UiClicks.Clicked += OnClicked;
+        if (UiDropdowns.Install()) UiDropdowns.Selected += OnDropdownSelected;
 
         var open = UnityEngine.Object.FindObjectOfType<ExpeditionMenu_Setup_V2>();
         if (open != null) Inject(open);
@@ -68,11 +81,30 @@ internal static class ExpeditionSetupSection
         var cur = _current;
         _current = null;
         Toggled = null;
+        PerkChosen = null;
+        LastTeamClicked = null;
         _openMenuHook = null; // disposed by Hooks.DisposeAll
+        if (cur != null) RemoveTeamRow(cur.Menu);
         if (cur?.Root == null) return;
-        cur.Root.name = "(removed)"; // Destroy is deferred: don't let a reload in this frame find it
-        cur.Root.SetActive(false);
-        UnityEngine.Object.Destroy(cur.Root);
+        Remove(cur.Root);
+    }
+
+    private static void Remove(GameObject go)
+    {
+        go.name = "(removed)"; // Destroy is deferred: don't let a reload in this frame find it
+        go.SetActive(false);
+        UnityEngine.Object.Destroy(go);
+    }
+
+    /// <summary>The "Last team" button: shown only while Auto-fill is, greyed out (locked) unless enabled.</summary>
+    public static void SetLastTeam(bool enabled)
+    {
+        var cur = _current;
+        if (cur == null || cur.LastTeam == null || cur.TeamRow == null) return;
+        // The game shows/hides Auto-fill itself; the row (and with it Last team) follows.
+        bool visible = cur.Menu._buttonAutoFill.gameObject.activeSelf;
+        if (cur.TeamRow.activeSelf != visible) cur.TeamRow.SetActive(visible);
+        if (cur.LastTeam.interactable != enabled) cur.LastTeam.SetLocked(!enabled);
     }
 
     /// <summary>Show or hide the section, and set the toggle (greyed out unless enabled) and status text.</summary>
@@ -93,6 +125,33 @@ internal static class ExpeditionSetupSection
         }
     }
 
+    /// <summary>The perk dropdown: hidden when `options` is null or empty, else showing options[index].</summary>
+    public static void SetPerks(string[] options, int index, bool enabled)
+    {
+        var cur = _current;
+        if (cur == null || cur.Root == null || cur.PerkRow == null) return;
+        bool visible = options != null && options.Length > 0;
+        if (cur.PerkRow.activeSelf != visible) cur.PerkRow.SetActive(visible);
+        if (!visible) return;
+        if (cur.PerkOptions == null || !System.Linq.Enumerable.SequenceEqual(cur.PerkOptions, options))
+        {
+            cur.PerkOptions = options;
+            cur.PerkDropdown.ClearOptions();
+            var list = new Il2CppSystem.Collections.Generic.List<string>();
+            foreach (var o in options) list.Add(o);
+            cur.PerkDropdown.AddOptions(list);
+        }
+        if (cur.PerkDropdown.value != index) cur.PerkDropdown.SetValueWithoutNotify(index);
+        if (cur.PerkDropdown.interactable != enabled) cur.PerkDropdown.interactable = enabled;
+    }
+
+    private static void OnDropdownSelected(IntPtr dropdown)
+    {
+        var cur = _current;
+        if (cur?.PerkDropdown == null || cur.PerkRow == null || dropdown != cur.PerkDropdown.Pointer) return;
+        PerkChosen?.Invoke(cur.PerkDropdown.value);
+    }
+
     private static void OnOpenMenu(IntPtr self, IntPtr settings, IntPtr eventsMenu, IntPtr teamSelectMenu,
         IntPtr cargoSelectMenu, IntPtr exhibitSelectMenu, IntPtr onClosed, IntPtr method)
     {
@@ -104,6 +163,11 @@ internal static class ExpeditionSetupSection
     private static void OnClicked(IntPtr focus)
     {
         var cur = _current;
+        if (cur != null && cur.LastTeam != null && focus == cur.LastTeam.Pointer)
+        {
+            if (cur.LastTeam.interactable && cur.LastTeam.gameObject.activeInHierarchy) LastTeamClicked?.Invoke();
+            return;
+        }
         // The game has already flipped the slider when this runs.
         if (cur != null && focus == cur.Button && cur.Root != null && cur.Root.activeInHierarchy && cur.Toggle.interactable)
             Toggled?.Invoke(cur.Toggle._isOn);
@@ -111,10 +175,11 @@ internal static class ExpeditionSetupSection
 
     private static void Inject(ExpeditionMenu_Setup_V2 menu)
     {
-        var content = menu._buttonAutoFill.transform.parent;
+        var content = ContentOf(menu);
         if (_current != null && _current.Root != null && _current.Menu.Pointer == menu.Pointer) return;
         var existing = content.Find(SectionName);
         if (existing != null) UnityEngine.Object.DestroyImmediate(existing.gameObject); // from an older logic version
+        RemoveTeamRow(menu); // from an older logic version
 
         var cargo = menu._cargoSlot.transform.parent; // containerCargo: header + cargo slot
         var toggleTemplate = UiTemplates.ToggleRow();
@@ -148,6 +213,8 @@ internal static class ExpeditionSetupSection
         var toggle = toggleRow.GetComponent<WidgetToggleSlider>();
         toggle.OnValueChanged = new UnityEngine.Events.UnityEvent<bool>(); // no copied listeners
 
+        var (perkRow, perkDropdown) = AddPerkRow(root.transform);
+
         // Status text: a copy of the label, smaller and wrapping.
         var statusRow = NewRow(root.transform, "rowStatus", 60);
         var status = UnityEngine.Object.Instantiate(labelText.gameObject, statusRow.transform).GetComponent<TMPro.TMP_Text>();
@@ -171,7 +238,118 @@ internal static class ExpeditionSetupSection
             Button = toggle._button != null ? toggle._button.Pointer : IntPtr.Zero,
             Status = status,
             StatusLayout = statusRow.GetComponent<UnityEngine.UI.LayoutElement>(),
+            PerkRow = perkRow,
+            PerkDropdown = perkDropdown,
         };
+        (_current.LastTeam, _current.TeamRow) = AddLastTeamButton(menu);
+    }
+
+    private const string TeamRowName = "rowTeamButtons";
+    private const float TeamButtonWidth = 460; // two of these fit the panel
+    private static float _autoFillWidth = 633;  // Auto-fill's own width, restored on unload
+
+    /// <summary>The setup screen's content list (Auto-fill's parent, unless it's in our row).</summary>
+    private static Transform ContentOf(ExpeditionMenu_Setup_V2 menu)
+    {
+        var parent = menu._buttonAutoFill.transform.parent;
+        return parent.name == TeamRowName ? parent.parent : parent;
+    }
+
+    /// <summary>
+    /// "Last team": a copy of the Auto-fill button, next to it in a row that takes Auto-fill's place.
+    /// The game wires Auto-fill's click at runtime on that instance, so the copy has no click
+    /// handler of its own; ours comes through <see cref="UiClicks"/>.
+    /// </summary>
+    private static (TPS.Core.UI.UIButton, GameObject) AddLastTeamButton(ExpeditionMenu_Setup_V2 menu)
+    {
+        var autoFill = menu._buttonAutoFill;
+        if (autoFill == null) return (null, null);
+        var content = autoFill.transform.parent;
+
+        var row = new GameObject(TeamRowName);
+        row.AddComponent<RectTransform>().SetParent(content, false);
+        row.transform.SetSiblingIndex(autoFill.transform.GetSiblingIndex());
+        var layout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+        layout.spacing = 20;
+        layout.childAlignment = TextAnchor.MiddleCenter;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+        var autoFillLayout = autoFill.GetComponent<UnityEngine.UI.LayoutElement>();
+        row.AddComponent<UnityEngine.UI.LayoutElement>().preferredHeight = autoFillLayout != null ? autoFillLayout.preferredHeight : 113;
+
+        var go = UnityEngine.Object.Instantiate(autoFill.gameObject, row.transform);
+        go.name = "buttonLastTeam";
+        foreach (var spawner in go.GetComponentsInChildren<TooltipSpawner>(true)) spawner.enabled = false;
+        foreach (var text in go.GetComponentsInChildren<TMPro.TMP_Text>(true)) UiText.Set(text, "Last team");
+        autoFill.transform.SetParent(row.transform, false);
+        autoFill.transform.SetAsFirstSibling();
+        if (autoFillLayout != null && autoFillLayout.preferredWidth > TeamButtonWidth) _autoFillWidth = autoFillLayout.preferredWidth;
+        foreach (var le in row.GetComponentsInChildren<UnityEngine.UI.LayoutElement>(true))
+            if (le.gameObject != row) le.preferredWidth = TeamButtonWidth;
+        return (go.GetComponent<TPS.Core.UI.UIButton>(), row);
+    }
+
+    /// <summary>Put Auto-fill back where it was (full width) and remove our row with Last team in it.</summary>
+    private static void RemoveTeamRow(ExpeditionMenu_Setup_V2 menu)
+    {
+        var autoFill = menu != null ? menu._buttonAutoFill : null;
+        if (autoFill == null) return;
+        var row = autoFill.transform.parent;
+        if (row.name != TeamRowName) return;
+        autoFill.transform.SetParent(row.parent, false);
+        autoFill.transform.SetSiblingIndex(row.GetSiblingIndex());
+        var le = autoFill.GetComponent<UnityEngine.UI.LayoutElement>();
+        if (le != null) le.preferredWidth = _autoFillWidth;
+        Remove(row.gameObject);
+    }
+
+    /// <summary>"Repeat for perk" + dropdown, fitted like the toggle row; hidden until <see cref="SetPerks"/> shows it.</summary>
+    private static (GameObject, TMPro.TMP_Dropdown) AddPerkRow(Transform section)
+    {
+        var template = UiTemplates.DropdownRow();
+        if (template == null) { Entry.Host.Log.LogError("[setup] no dropdown template; perk choice unavailable"); return (null, null); }
+
+        // Label on its own line with the dropdown below it at full width: next to each other there's
+        // no room for perk names in this narrow panel.
+        var row = NewRow(section, "rowPerk", 190);
+        var dropdownRow = UnityEngine.Object.Instantiate(template, row.transform);
+        dropdownRow.name = "dropdownPerk";
+        dropdownRow.SetActive(true);
+        var rt = dropdownRow.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0, 0.5f);
+        rt.anchorMax = new Vector2(1, 0.5f);
+        rt.offsetMin = new Vector2(20, rt.offsetMin.y);
+        rt.offsetMax = new Vector2(-120, rt.offsetMax.y);
+        rt.sizeDelta = new Vector2(rt.sizeDelta.x, 189);
+        rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, 0);
+        var bg = dropdownRow.transform.Find("ContainerBG");
+        Place(bg?.Find("TextOptionName"), 1, new Vector2(24, -8), 70);
+        Place(bg?.Find("Dropdown"), 0, new Vector2(0, 12), 94);
+        Place(bg?.Find("Template"), 0, new Vector2(0, 12), 400, pivotY: 1); // the list opens below the dropdown
+        // Every label in the clone is ours now (incl. the list items): stop I2 re-translating them.
+        foreach (var l in dropdownRow.GetComponentsInChildren<I2.Loc.Localize>(true)) l.enabled = false;
+        foreach (var spawner in dropdownRow.GetComponentsInChildren<TooltipSpawner>(true)) spawner.enabled = false;
+        var label = dropdownRow.transform.Find("ContainerBG/TextOptionName")?.GetComponent<TMPro.TMP_Text>()
+                    ?? dropdownRow.GetComponentInChildren<TMPro.TMP_Text>(true);
+        UiText.Set(label, "Repeat for perk");
+        var dropdown = dropdownRow.GetComponentInChildren<TMPro.TMP_Dropdown>(true);
+        dropdown.onValueChanged = new TMPro.TMP_Dropdown.DropdownEvent(); // no copied listeners
+        row.SetActive(false);
+        return (row, dropdown);
+    }
+
+    /// <summary>Stretch a child across its parent's width (24 px margins), at its top (anchorY 1) or bottom (0).</summary>
+    private static void Place(Transform t, float anchorY, Vector2 position, float height, float? pivotY = null)
+    {
+        var rt = t != null ? t.GetComponent<RectTransform>() : null;
+        if (rt == null) return;
+        rt.anchorMin = new Vector2(0, anchorY);
+        rt.anchorMax = new Vector2(1, anchorY);
+        rt.pivot = new Vector2(anchorY == 0 ? 0.5f : 0, pivotY ?? anchorY);
+        rt.anchoredPosition = position;
+        rt.sizeDelta = new Vector2(-48, height);
     }
 
     private static GameObject NewRow(Transform parent, string name, float height)

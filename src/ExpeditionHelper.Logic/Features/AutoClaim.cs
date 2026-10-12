@@ -8,8 +8,8 @@ namespace ExpeditionHelper.Logic.Features;
 /// <summary>
 /// Claims returned expedition crates without the reward scene when the exhibit inside is of a type
 /// the museum already has (the game's own `IsNewExhibit` flag is false): whole exhibits go straight
-/// to inventory, pieces of multi-part (shard) exhibits are attached; science materials and expert
-/// XP are claimed if enabled. New discoveries and other rewards are left for the player to open.
+/// to inventory, pieces of multi-part (shard) exhibits are attached; science materials, expert XP
+/// and perks are claimed if enabled. New discoveries and other rewards are left for the player to open.
 ///
 /// Polls instead of hooking: a handful of expeditions checked twice a second is negligible and
 /// needs no native detour.
@@ -81,6 +81,12 @@ internal sealed class AutoClaim
             if (!_settings.AutoClaimExpertXP.Value) return "expert XP (auto-claim off)";
             claim = true;
             return "expert XP";
+        }
+        if (type.Contains("ExpeditionReward_Perk"))
+        {
+            if (!_settings.AutoClaimPerks.Value) return "perk (auto-claim off)";
+            claim = true;
+            return "perk";
         }
         return $"not an exhibit ({type})";
     }

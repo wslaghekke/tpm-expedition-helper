@@ -18,7 +18,7 @@ namespace ExpeditionHelper.Logic.Game;
 /// clicks are caught with detours on the widget classes and matched against our instances:
 ///  - tab click: <see cref="UiClicks"/> (the tab's own click handler, UITab.OnPointerDown, sits
 ///    in Denuvo-protected code and can't be hooked);
-///  - toggles: WidgetToggleSlider.OnButtonPressed; dropdowns: TMP_Dropdown.OnSelectItem.
+///  - toggles: WidgetToggleSlider.OnButtonPressed; dropdowns: <see cref="UiDropdowns"/>.
 /// The menu itself switches pages with SetMode(SettingsMode), which knows nothing about our
 /// page: a detour on it hides our page whenever the game shows one of its own, and
 /// ResetPreferences ("Revert To Default") is redirected to our defaults while our page is shown.
@@ -33,11 +33,9 @@ internal static class SettingsMenuTab
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void InstanceFn(IntPtr self, IntPtr method);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SetModeFn(IntPtr self, int mode, IntPtr method);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SelectItemFn(IntPtr self, IntPtr toggle, IntPtr method);
 
     private static NativeHook<InstanceFn> _openMenuHook, _resetHook, _togglePressedHook;
     private static NativeHook<SetModeFn> _setModeHook;
-    private static NativeHook<SelectItemFn> _selectItemHook;
 
     private static string _title;
     private static string _iconSprite;
@@ -72,7 +70,7 @@ internal static class SettingsMenuTab
         _setModeHook = NativeHook<SetModeFn>.TryCreate(typeof(PreferencesMenu).GetMethod(nameof(PreferencesMenu.SetMode), f), OnSetMode);
         _resetHook = NativeHook<InstanceFn>.TryCreate(typeof(PreferencesMenu).GetMethod(nameof(PreferencesMenu.ResetPreferences), f), OnResetPreferences);
         _togglePressedHook = NativeHook<InstanceFn>.TryCreate(typeof(WidgetToggleSlider).GetMethod(nameof(WidgetToggleSlider.OnButtonPressed), f), OnTogglePressed);
-        _selectItemHook = NativeHook<SelectItemFn>.TryCreate(typeof(TMPro.TMP_Dropdown).GetMethod("OnSelectItem", f), OnSelectItem);
+        UiDropdowns.Install();
         if (_openMenuHook == null || _setModeHook == null || !UiClicks.Install())
         {
             Entry.Host.Log.LogError("[settings] the in-game settings tab is unavailable (see hook errors above); edit the .cfg instead");
@@ -80,6 +78,7 @@ internal static class SettingsMenuTab
         }
 
         UiClicks.Clicked += TabClicked;
+        UiDropdowns.Selected += OnDropdownSelected;
 
         // Hot reload while the menu is open.
         var open = UnityEngine.Object.FindObjectOfType<PreferencesMenu>();
@@ -162,7 +161,7 @@ internal static class SettingsMenuTab
         for (int i = rows.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(rows.GetChild(i).gameObject);
 
         var toggleTemplate = panel._toggleDisableCameraShake.gameObject;
-        var dropdownTemplate = RowOf(panel._guestCapDropdown.transform);
+        var dropdownTemplate = UiTemplates.RowOf(panel._guestCapDropdown.transform);
         cur.Content = new SettingsPage(rows, toggleTemplate, dropdownTemplate);
         _build(cur.Content);
         cur.Content.Refresh();
@@ -175,14 +174,6 @@ internal static class SettingsMenuTab
         Map(menu._buttonControls, PreferencesMenu.SettingsMode.Controls);
         Map(menu._buttonStreaming, PreferencesMenu.SettingsMode.Streaming);
         _current = cur;
-    }
-
-    /// <summary>The row (direct child of the scroll content) that contains a widget.</summary>
-    private static GameObject RowOf(Transform widget)
-    {
-        var t = widget;
-        while (t.parent != null && t.parent.GetComponent<UnityEngine.UI.ScrollRect>() == null && t.parent.name != "Content") t = t.parent;
-        return t.gameObject;
     }
 
     private static Sprite Icon()
@@ -290,12 +281,7 @@ internal static class SettingsMenuTab
         catch (Exception e) { Entry.Host.Log.LogError($"[settings] toggle failed: {e}"); }
     }
 
-    private static void OnSelectItem(IntPtr self, IntPtr toggle, IntPtr method)
-    {
-        _selectItemHook.Original(self, toggle, method);
-        try { _current?.Content?.OnDropdown(self); }
-        catch (Exception e) { Entry.Host.Log.LogError($"[settings] dropdown failed: {e}"); }
-    }
+    private static void OnDropdownSelected(IntPtr dropdown) => _current?.Content?.OnDropdown(dropdown);
 }
 
 /// <summary>The rows of our settings page.</summary>

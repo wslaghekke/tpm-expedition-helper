@@ -48,7 +48,7 @@ To check it worked: open Settings in game; there should be an extra tab with a m
 | Open crates automatically | Off | Claims returning crates for you, per the options below it. |
 | Send known exhibits to inventory | On | Exhibits you've discovered before go to inventory. New ones are left for you to open. |
 | Attach pieces of known exhibits | On | Pieces of multi-part exhibits are attached like "Attach to Exhibit" does. |
-| Claim science materials / expert XP | On | Also claims those crates. |
+| Claim science materials / expert XP / perks | On | Also claims those crates. |
 | Repeat until done by default | Off | The starting value of the "Repeat until done" switch on the setup screen. |
 | Until a pristine copy is owned | On | Goal: a pristine copy of every exhibit the location can drop (placed or in inventory). |
 | Until knowledge is maxed | On | Goal: maximum knowledge of every exhibit there. |
@@ -62,16 +62,25 @@ To check it worked: open Settings in game; there should be an extra tab with a m
 
 **On the expedition setup screen**, under "Choose Cargo", the **Repeat until done** switch turns
 repeating on or off for that location, and the line below it shows what's still to get there.
-Exhibits you haven't discovered yet are only counted, never named. Locations that don't drop
-exhibits can't be repeated.
+Exhibits you haven't discovered yet are only counted, never named.
+
+At locations that can drop perks, **Repeat for perk** lets you pick one: the expedition then
+repeats until a crate brings that perk back, instead of using the exhibit goals. Picking a perk
+turns repeating on; once the perk has come back, the choice goes back to "None". Perks that need a higher survey level are marked in the list. Locations that
+drop neither exhibits nor perks can't be repeated.
+
+**Last team**, next to Auto-fill, puts the team and cargo you last sent to that location back,
+whichever helipad you're sending from. Team members who can't go right now (still away,
+recovering) leave their slot empty, and the cargo stays as it is if you've run out of it.
 
 Good to know:
 - A repeat starts once the helicopter has landed and the whole team is back and fit to go.
 - Pristine exhibits only drop once a location reaches its top survey level, which takes several
   trips there. The status line tells you when that's not the case yet. The *Speedy* approach
   doesn't raise the survey level; *Detailed* and the Survey Scanner cargo raise it fastest.
-- The per-location switches and running repeat chains reset when you quit the game. An expedition
-  that's out when you quit comes back normally; just send it again to start repeating.
+- The per-location switches, perk choices and last teams are kept per museum (in
+  `BepInEx/config/ExpeditionHelper/museums/`), so they survive a restart, and an expedition that's
+  out when you quit carries on repeating when it comes back.
 - Settings are also stored in `BepInEx/config/tpm.expeditionhelper.cfg`, if you'd rather edit
   them in a text editor (changes apply while the game runs).
 

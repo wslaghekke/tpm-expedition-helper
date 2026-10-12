@@ -43,6 +43,21 @@ internal static class UiTemplates
     /// <summary>The Settings menu's "Disable Camera Shake" row: label + On/Off slider (WidgetToggleSlider).</summary>
     public static GameObject ToggleRow() => SettingsGamePanel()?._toggleDisableCameraShake?.gameObject;
 
+    /// <summary>The Settings menu's "Max Guest Limit" row: label + TMP_Dropdown.</summary>
+    public static GameObject DropdownRow()
+    {
+        var dropdown = SettingsGamePanel()?._guestCapDropdown;
+        return dropdown != null ? RowOf(dropdown.transform) : null;
+    }
+
+    /// <summary>The row (direct child of the Settings page's scroll content) that contains a widget.</summary>
+    public static GameObject RowOf(Transform widget)
+    {
+        var t = widget;
+        while (t.parent != null && t.parent.GetComponent<UnityEngine.UI.ScrollRect>() == null && t.parent.name != "Content") t = t.parent;
+        return t.gameObject;
+    }
+
     private static PreferencesPanelGame SettingsGamePanel()
     {
         if (_settingsPrefab == null)

@@ -64,6 +64,8 @@ public static class Entry
 
         Game.InboxNotice.RemoveAll(); // orphans from a previous logic version
 
+        host.Update += Diagnostics.UpdateTimings.Wrap("museum-data", Features.MuseumData.Update); // first: the others read it
+
         var autoClaim = new Features.AutoClaim(Settings);
         host.Update += Diagnostics.UpdateTimings.Wrap("auto-claim", autoClaim.Update);
 
@@ -76,6 +78,8 @@ public static class Entry
         Features.SettingsTab.Install(Settings);
         var setupOption = new Features.SetupRepeatOption(Settings);
         host.Update += Diagnostics.UpdateTimings.Wrap("setup-screen", setupOption.Update);
+        var lastTeam = new Features.SetupLastTeam();
+        host.Update += Diagnostics.UpdateTimings.Wrap("last-team", lastTeam.Update);
         host.Exports["Perf.Report"] = (Func<string>)Diagnostics.UpdateTimings.Report;
         host.Exports["Perf.Reset"] = (Action)Diagnostics.UpdateTimings.Reset;
         Diagnostics.UpdateTimings.Reset();
@@ -85,12 +89,15 @@ public static class Entry
 
     public static void Unload()
     {
+        Features.MuseumData.Flush();
         Game.GamePopup.CloseAll();
         Game.AdvisorNotice.CloseAll();
         Game.InboxNotice.RemoveAll();
         Game.SettingsMenuTab.Uninstall();
         Game.ExpeditionSetupSection.Uninstall();
         Game.UiClicks.Reset();
+        Game.UiDropdowns.Reset();
+        Game.ExpeditionActions.Reset();
         Hooks.DisposeAll();
         Host?.Log.LogInfo("Logic unloaded");
     }

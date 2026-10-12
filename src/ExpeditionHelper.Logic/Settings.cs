@@ -23,6 +23,7 @@ public sealed class Settings
     public ConfigEntry<bool> AttachShards { get; }
     public ConfigEntry<bool> AutoClaimMaterials { get; }
     public ConfigEntry<bool> AutoClaimExpertXP { get; }
+    public ConfigEntry<bool> AutoClaimPerks { get; }
 
     // [Repeat]
     public ConfigEntry<bool> RepeatExpeditions { get; }
@@ -38,7 +39,7 @@ public sealed class Settings
 
     public ConfigEntryBase[] Entries => new ConfigEntryBase[]
     {
-        AutoOpenCrates, SendKnownExhibitsToInventory, AttachShards, AutoClaimMaterials, AutoClaimExpertXP,
+        AutoOpenCrates, SendKnownExhibitsToInventory, AttachShards, AutoClaimMaterials, AutoClaimExpertXP, AutoClaimPerks,
         RepeatExpeditions, UntilPristine, UntilMaxKnowledge, CountInventoryTowardsKnowledge, MinCashReserve,
         OnlyWhenProfitable, KeepMonthlyCostsCovered, AvoidSeasonalDangers, MaxRepeats, Notifications,
     };
@@ -56,6 +57,8 @@ public sealed class Settings
             "When auto-opening, also claim crates with science materials.");
         AutoClaimExpertXP = cfg.Bind("Expeditions", "AutoClaimExpertXP", true,
             "When auto-opening, also claim crates with expert XP.");
+        AutoClaimPerks = cfg.Bind("Expeditions", "AutoClaimPerks", true,
+            "When auto-opening, also claim crates with perks (they go to your perks, ready to install).");
 
         RepeatExpeditions = cfg.Bind("Repeat", "RepeatExpeditions", false,
             "Default for the \"Repeat until done\" toggle on the expedition setup screen: send a finished expedition again (same location, team and cargo) until every enabled goal below is reached for ALL exhibits that location can drop. The toggle overrides this per location (until the game restarts).");
