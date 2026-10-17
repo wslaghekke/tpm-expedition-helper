@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using BepInEx.Configuration;
 using ExpeditionHelper.Logic.Game;
+using ExpeditionHelper.Logic.Workshop;
 
 namespace ExpeditionHelper.Logic.Features;
 
@@ -16,13 +17,13 @@ internal static class SettingsTab
     private static readonly int[] CashReserves = { 0, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000 };
     private static readonly int[] RepeatLimits = { 1, 2, 3, 5, 10, 15, 20, 30, 50 };
 
-    public static void Install(Settings s)
+    public static void Install(Settings s, WorkshopSettings w)
     {
         SettingsMenuTab.Install("Expedition Helper", "Icons_Menu_TitleHeaders_ExpeditionMap",
-            page => Build(page, s), () => ResetToDefaults(s));
+            page => Build(page, s, w), () => ResetToDefaults(s, w));
     }
 
-    private static void Build(SettingsPage page, Settings s)
+    private static void Build(SettingsPage page, Settings s, WorkshopSettings w)
     {
         bool AutoOpen() => s.AutoOpenCrates.Value;
         bool Repeat() => s.RepeatExpeditions.Value;
@@ -53,6 +54,9 @@ internal static class SettingsTab
         Steps(page, "Keep at least this much cash", s.MinCashReserve, CashReserves, v => v.ToString("N0", CultureInfo.InvariantCulture), Repeat);
         Toggle(page, "Only while the museum makes a profit", s.OnlyWhenProfitable, Repeat);
         Toggle(page, "Keep month-end costs covered", s.KeepMonthlyCostsCovered, Repeat);
+
+        page.Header("Workshop");
+        Toggle(page, "Wider project menu (3 columns)", w.WiderProjectMenu);
     }
 
     private static void Toggle(SettingsPage page, string label, ConfigEntry<bool> entry, Func<bool> enabled = null) =>
@@ -79,8 +83,8 @@ internal static class SettingsTab
             enabled);
     }
 
-    private static void ResetToDefaults(Settings s)
+    private static void ResetToDefaults(Settings s, WorkshopSettings w)
     {
-        foreach (var entry in s.Entries) entry.BoxedValue = entry.DefaultValue;
+        foreach (var entry in s.Entries.Concat(w.Entries)) entry.BoxedValue = entry.DefaultValue;
     }
 }

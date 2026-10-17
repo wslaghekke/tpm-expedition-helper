@@ -18,16 +18,19 @@ public static class Entry
 {
     internal static HostApi Host { get; private set; } = null!;
     internal static Settings Settings { get; private set; } = null!;
+    internal static Workshop.WorkshopSettings WorkshopSettings { get; private set; } = null!;
 
     public static void Load(HostApi host)
     {
         Host = host;
         Settings = new Settings(host.Config);
+        WorkshopSettings = new Workshop.WorkshopSettings(host.Config);
 
         host.ConfigChanged += e =>
         {
             host.Log.LogInfo($"Setting changed: {e.ChangedSetting.Definition} = {e.ChangedSetting.BoxedValue}");
             MainThread.Post(Game.SettingsMenuTab.Refresh); // .cfg reloads arrive on the file watcher's thread
+            if (e.ChangedSetting == WorkshopSettings.WiderProjectMenu) MainThread.Post(Workshop.WorkshopLayout.Refresh);
         };
 
         // Dev bridge access (tools/snippets).
@@ -75,7 +78,8 @@ public static class Entry
         host.Exports["Repeat.StartNow"] = (Func<string, string>)repeat.StartNow;
         Features.SkipClosedMapFade.Install();
 
-        Features.SettingsTab.Install(Settings);
+        Features.SettingsTab.Install(Settings, WorkshopSettings);
+        Workshop.WorkshopLayout.Install(WorkshopSettings);
         var setupOption = new Features.SetupRepeatOption(Settings);
         host.Update += Diagnostics.UpdateTimings.Wrap("setup-screen", setupOption.Update);
         var lastTeam = new Features.SetupLastTeam();
@@ -98,6 +102,7 @@ public static class Entry
         Game.UiClicks.Reset();
         Game.UiDropdowns.Reset();
         Game.ExpeditionActions.Reset();
+        Workshop.WorkshopLayout.Uninstall();
         Hooks.DisposeAll();
         Host?.Log.LogInfo("Logic unloaded");
     }

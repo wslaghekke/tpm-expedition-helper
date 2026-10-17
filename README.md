@@ -59,6 +59,7 @@ To check it worked: open Settings in game; there should be an extra tab with a m
 | Keep at least this much cash | 10,000 | Never pays for a repeat that would leave less than this. |
 | Only while the museum makes a profit | On | Waits while the museum itself is losing money (expedition costs are covered by the two cash checks). |
 | Keep month-end costs covered | On | Waits if paying would leave too little for wages and loan repayments. |
+| Wider project menu (3 columns) | Off | Workshop: makes the Start Workshop Project menu wider, so all category tabs fit and projects show 3 per row. |
 
 **On the expedition setup screen**, a **Repeat** section at the bottom of the setup list: the
 **Repeat until done** switch turns repeating on or off for that location, and the line below it
