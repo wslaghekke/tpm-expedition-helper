@@ -54,38 +54,47 @@ To check it worked: open Settings in game; there should be an extra tab with a m
 | Until knowledge is maxed | On | Goal: maximum knowledge of every exhibit there. |
 | Count inventory towards knowledge | On | Exhibits in your inventory that you could analyse count as knowledge you'll get. |
 | Wait out seasonal dangers | On | Holds a repeat while the trip would run into a seasonal danger your team can't counter. |
-| Maximum repeats in a row | 10 | Safety limit per expedition. |
+| Maximum repeats in a row | 10 | Safety limit per expedition. For a number of perks or a stock target it counts only runs in a row that brought none of it. |
 | Notifications | All | All / only when a repeat stops / none. |
 | Keep at least this much cash | 10,000 | Never pays for a repeat that would leave less than this. |
-| Only while the museum makes a profit | On | Waits while you're losing money. |
+| Only while the museum makes a profit | On | Waits while the museum itself is losing money (expedition costs are covered by the two cash checks). |
 | Keep month-end costs covered | On | Waits if paying would leave too little for wages and loan repayments. |
 
-**On the expedition setup screen**, under "Choose Cargo", the **Repeat until done** switch turns
-repeating on or off for that location, and the line below it shows what's still to get there.
-Exhibits you haven't discovered yet are only counted, never named.
+**On the expedition setup screen**, a **Repeat** section at the bottom of the setup list: the
+**Repeat until done** switch turns repeating on or off for that location, and the line below it
+shows what's still to get there. Exhibits you haven't discovered yet are only counted, never named.
 
-At locations that can drop perks, **Repeat for perk** lets you pick one: the expedition then
-repeats until a crate brings that perk back, instead of using the exhibit goals. Picking a perk
-turns repeating on; once the perk has come back, the choice goes back to "None". Perks that need
-a higher survey level are marked in the list.
-
-At locations that drop science materials (Metal, Whirlicogs, Golden Truffles, ...), **Repeat until
-in stock** works the same way with a target amount: the expedition repeats until you have that
-much. The targets on offer go in steps that suit the material (1 Golden Truffle, 100 Metal) and
-start above what you have. Auto-open's "Claim science materials" option keeps these chains going
-without you opening each crate. Locations that drop no exhibits, perks or materials (cash
+At locations that can drop perks or science materials (Metal, Whirlicogs, Golden Truffles, ...),
+you can repeat for one of those instead of the exhibit goals: pick it in the dropdown, then how
+many with the workshop-style buttons below it. For a perk that's **x1 x3 x5 x10** more than you
+have; for a material it's steps that suit it (**+100 +300 +500 +1,000** Metal, **+1 +3 +5 +10**
+Golden Truffles). The expedition repeats until you have that many, then the choice resets. Perks
+you haven't found there yet can only be picked as "until it drops", and perks that need a higher
+survey level are marked. Locations with only one thing to repeat for show a switch instead of the
+dropdown; locations without exhibits have no "Repeat until done" switch, as picking a goal is what
+repeats there. Auto-open's "Claim science materials" and "Claim perks" options keep these chains
+going without you opening each crate. Locations that drop no exhibits, perks or materials (cash
 locations) can't be repeated.
+
+**In the art studio** (Arty-Facts), the Repeat section sits below "Explore Emotion": **x1 x3 x5 x10**
+is how many sessions to run in a row with the same artist, art type and emotion (x1 is just this
+one). Each next session starts once you've revealed the last piece yourself, and with **Wait until
+fully rested** (on by default) once the artist has also lost the "Blank-ish Canvas" feeling, which
+otherwise adds a Creative Juice-less event to the session. Auto-open leaves studio pieces for you to
+reveal.
 
 **Last team**, next to Auto-fill, puts the team and cargo you last sent to that location back,
 whichever helipad you're sending from. Team members who can't go right now (still away,
 recovering) leave their slot empty, and the cargo stays as it is if you've run out of it.
 
 Good to know:
-- A repeat starts once the helicopter has landed and the whole team is back and fit to go.
+- A repeat starts once the helicopter has landed and the whole team is back and fit to go. An
+  artist's studio rest counts from the end of a session, so a piece left unrevealed for a while
+  can be followed by the next session straight away.
 - Pristine exhibits only drop once a location reaches its top survey level, which takes several
   trips there. The status line tells you when that's not the case yet. The *Speedy* approach
   doesn't raise the survey level; *Detailed* and the Survey Scanner cargo raise it fastest.
-- The per-location switches, perk choices and last teams are kept per museum (in
+- The per-location switches, perk, stock and studio choices and last teams are kept per museum (in
   `BepInEx/config/ExpeditionHelper/museums/`), so they survive a restart, and an expedition that's
   out when you quit carries on repeating when it comes back.
 - Settings are also stored in `BepInEx/config/tpm.expeditionhelper.cfg`, if you'd rather edit

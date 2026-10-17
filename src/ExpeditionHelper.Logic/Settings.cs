@@ -34,6 +34,7 @@ public sealed class Settings
     public ConfigEntry<bool> OnlyWhenProfitable { get; }
     public ConfigEntry<bool> KeepMonthlyCostsCovered { get; }
     public ConfigEntry<bool> AvoidSeasonalDangers { get; }
+    public ConfigEntry<bool> WaitUntilArtistsRested { get; }
     public ConfigEntry<int> MaxRepeats { get; }
     public ConfigEntry<NotificationLevel> Notifications { get; }
 
@@ -41,7 +42,7 @@ public sealed class Settings
     {
         AutoOpenCrates, SendKnownExhibitsToInventory, AttachShards, AutoClaimMaterials, AutoClaimExpertXP, AutoClaimPerks,
         RepeatExpeditions, UntilPristine, UntilMaxKnowledge, CountInventoryTowardsKnowledge, MinCashReserve,
-        OnlyWhenProfitable, KeepMonthlyCostsCovered, AvoidSeasonalDangers, MaxRepeats, Notifications,
+        OnlyWhenProfitable, KeepMonthlyCostsCovered, AvoidSeasonalDangers, WaitUntilArtistsRested, MaxRepeats, Notifications,
     };
 
     public Settings(ConfigFile cfg)
@@ -71,11 +72,14 @@ public sealed class Settings
         MinCashReserve = cfg.Bind("Repeat", "MinCashReserve", 10000,
             "Don't repeat when museum cash would drop below this after paying the expedition cost.");
         OnlyWhenProfitable = cfg.Bind("Repeat", "OnlyWhenProfitable", true,
-            "Hold off repeating while the museum is losing money (negative profit); resume once it's profitable again.");
+            "Hold off repeating while the museum is losing money (its own takings and costs; expedition costs are covered by the cash checks); resume once it's profitable again.");
         KeepMonthlyCostsCovered = cfg.Bind("Repeat", "KeepMonthlyCostsCovered", true,
             "Hold off repeating if paying the expedition would leave too little cash to cover the upcoming month-end costs (salaries, loans, ...).");
         AvoidSeasonalDangers = cfg.Bind("Repeat", "AvoidSeasonalDangers", true,
             "Hold a repeat while the run would overlap a seasonal danger the team and cargo can't counter; it goes once the season has passed.");
+        WaitUntilArtistsRested = cfg.Bind("Repeat", "WaitUntilArtistsRested", true,
+            "Art studio repeats (the toggle on the studio's setup screen): wait until the artists are fully rested. After a session they first can't work in the studio (Blank Canvas), " +
+            "then they can but the session gets a Creative Juice-less event (Blank-ish Canvas); off, the next session goes as soon as the game allows.");
         MaxRepeats = cfg.Bind("Repeat", "MaxRepeats", 10,
             "Safety limit: stop after this many automatic repeats of the same expedition in a row. " +
             "For a number of a perk or a stock target, it counts only the runs in a row that brought none of it.");

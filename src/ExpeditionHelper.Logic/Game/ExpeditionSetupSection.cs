@@ -245,6 +245,21 @@ internal static class ExpeditionSetupSection
         if (cur?.ToggleLabel != null && cur.ToggleLabel.text != text) cur.ToggleLabel.text = text;
     }
 
+    /// <summary>
+    /// The toggle above the goal rows (where it switches repeating on), or below the quantity row
+    /// (where it's an option for the picked count, like the art studio's "wait until fully rested").
+    /// </summary>
+    public static void SetToggleBelowQuantity(bool below)
+    {
+        var cur = _current;
+        if (cur?.Root == null || cur.QuantityRow == null) return;
+        var toggleRow = cur.Toggle.transform.parent;
+        var quantityRow = cur.QuantityRow.transform;
+        if ((toggleRow.GetSiblingIndex() > quantityRow.GetSiblingIndex()) == below) return;
+        toggleRow.SetSiblingIndex(below ? quantityRow.GetSiblingIndex() : 1); // 0 is the header
+        RelayOut(cur);
+    }
+
     private static void OnDropdownSelected(IntPtr dropdown)
     {
         var cur = _current;
@@ -299,7 +314,11 @@ internal static class ExpeditionSetupSection
         // Section: a copy of the cargo section (header and layout) without its content.
         var root = UnityEngine.Object.Instantiate(cargo.gameObject, content);
         root.name = SectionName;
-        root.transform.SetSiblingIndex(cargo.GetSiblingIndex() + 1);
+        // Last in the list: after the art studio's "Explore Emotion" (and "Choose Material"), the
+        // sections after cargo that the game shows only for some kinds of location.
+        var emotion = menu._emotionContainer;
+        var last = emotion != null && emotion.transform.parent == content ? emotion.transform : cargo;
+        root.transform.SetSiblingIndex(last.GetSiblingIndex() + 1);
         for (int i = root.transform.childCount - 1; i >= 1; i--) UnityEngine.Object.DestroyImmediate(root.transform.GetChild(i).gameObject);
         var header = root.transform.GetChild(0).GetComponentInChildren<TMPro.TMP_Text>(true);
         UiText.Set(header, _title);
@@ -321,6 +340,7 @@ internal static class ExpeditionSetupSection
         UiText.Set(labelText, _label);
         // The label is sized for the Settings page's much wider rows: leave room for the slider.
         labelText.rectTransform.sizeDelta = new Vector2(-440, labelText.rectTransform.sizeDelta.y);
+        labelText.enableWordWrapping = false; // "Wait until fully rested" is a few pixels wider than that room, and fits
         var toggle = toggleRow.GetComponent<WidgetToggleSlider>();
         toggle.OnValueChanged = new UnityEngine.Events.UnityEvent<bool>(); // no copied listeners
 

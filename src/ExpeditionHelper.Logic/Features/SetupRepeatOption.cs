@@ -28,12 +28,13 @@ internal sealed class SetupRepeatOption
     // Everything the section depends on that the screen or the player can change, and how many of
     // the picked perk or material the player has; a tuple, not a string, as it's built every frame.
     private (long Poi, EExpeditionApproach Approach, long Cargo, EExpeditionType Type, bool On,
-        (long, int, int) Perk, (long, int) Stock, int StockBatch, int Have)? _lastKey;
+        (long, int, int) Perk, (long, int) Stock, int StockBatch, int Have, int StudioRuns, bool WaitRested)? _lastKey;
     private IntPtr _preloadedFor;
     private List<PerkRewards.Option> _perks = new();
     private List<MaterialRewards.Option> _materials = new();
     private List<Goal> _goals = new(); // as shown in the dropdown, after its first entry
     private Goal _single; // the location's only goal, without exhibits: a toggle instead of the dropdown
+    private bool _studio; // an art studio session is being set up: how many in a row, and whether to wait for rested artists
 
     /// <summary>One dropdown entry: a perk or a material (how many is picked in the quantity row).</summary>
     private sealed class Goal
@@ -76,12 +77,16 @@ internal sealed class SetupRepeatOption
         long perk = perkGoal.Perk;
         var stock = RepeatChoices.Stock(poi);
         int have = perk != 0 ? PerkRewards.Owned(perk) : stock.Material != 0 ? MaterialRewards.Stock(stock.Material) : 0;
-        var key = (poi, settings.Approach, settings.CargoModule.ID, settings.ExpeditionType, on, perkGoal, stock, RepeatChoices.StockBatch(poi), have);
+        var key = (poi, settings.Approach, settings.CargoModule.ID, settings.ExpeditionType, on, perkGoal, stock, RepeatChoices.StockBatch(poi), have,
+            RepeatChoices.StudioRuns(poi), _settings.WaitUntilArtistsRested.Value);
         bool timeRuns = UnityEngine.Time.timeScale > 0;
         if (key == _lastKey && (!timeRuns || now < _nextStatus)) return;
         _lastKey = key;
         _nextStatus = now + StatusRefreshSeconds;
 
+        _studio = settings.ExpeditionType == EExpeditionType.StudioRoom;
+        if (_studio) { UpdateStudio(poi); return; }
+        ExpeditionSetupSection.SetToggleBelowQuantity(false);
         bool visible = settings.ExpeditionType == EExpeditionType.Expedition;
         if (!visible) { ExpeditionSetupSection.Set(false, false, true, ""); return; }
 
@@ -143,6 +148,26 @@ internal sealed class SetupRepeatOption
 
     private const string ToggleLabel = "Repeat until done";
 
+    /// <summary>
+    /// Art studio: no goals to reach (every session makes a piece), so how many sessions to run in a
+    /// row (x1 is just this one) and, in the toggle's place, whether to wait for fully rested artists.
+    /// </summary>
+    private void UpdateStudio(long poi)
+    {
+        int runs = RepeatChoices.StudioRuns(poi);
+        bool rested = _settings.WaitUntilArtistsRested.Value;
+        ExpeditionSetupSection.SetGoals(null, null, 0, false);
+        ExpeditionSetupSection.SetToggleLabel(RestedLabel);
+        ExpeditionSetupSection.SetToggleBelowQuantity(true);
+        ExpeditionSetupSection.SetQuantity(true, QuantityIndex(runs));
+        string status = runs <= 1 ? "Runs once."
+            : $"Runs {runs} times in a row. Each next session starts once you've revealed the last piece" +
+              (rested ? " and the artist is fully rested." : " and the game lets the artist back in the studio.");
+        ExpeditionSetupSection.Set(true, rested, true, status);
+    }
+
+    private const string RestedLabel = "Wait until fully rested";
+
     /// <summary>The quantity button for a batch (x1 for picks from before the buttons, batch 0).</summary>
     private static int QuantityIndex(int batch) => Math.Max(0, Array.IndexOf(ExpeditionSetupSection.Quantities, batch));
 
@@ -164,7 +189,12 @@ internal sealed class SetupRepeatOption
         var settings = ExpeditionSetupSection.OpenMenu?._settings;
         if (settings == null) return;
         long poi = ((WorldMapLocationPOIDefinitionID)settings.Definition).ID;
-        if (_single != null) Pick(settings, poi, on ? _single : null); // the toggle stands in for the dropdown
+        if (_studio)
+        {
+            _settings.WaitUntilArtistsRested.Value = on; // the setting is shared by every studio location
+            Entry.Host.Log.LogInfo($"[repeat] art studio: wait until artists are fully rested {(on ? "on" : "off")} (setup screen)");
+        }
+        else if (_single != null) Pick(settings, poi, on ? _single : null); // the toggle stands in for the dropdown
         else
         {
             RepeatChoices.Set(_settings, poi, on);
@@ -201,7 +231,8 @@ internal sealed class SetupRepeatOption
 
     /// <summary>
     /// "xN" picked for the chosen perk or material: repeat until the player has N more of the perk,
-    /// or N steps (about a trip's worth each) more of the material, than now.
+    /// or N steps (about a trip's worth each) more of the material, than now. In the art studio:
+    /// run N sessions in a row.
     /// </summary>
     private void OnQuantityChosen(int count)
     {
@@ -209,6 +240,13 @@ internal sealed class SetupRepeatOption
         if (settings == null) return;
         long poi = ((WorldMapLocationPOIDefinitionID)settings.Definition).ID;
         string place = ExpeditionPlan.From(settings).DisplayName;
+        if (_studio)
+        {
+            RepeatChoices.SetStudioRuns(poi, count);
+            Entry.Host.Log.LogInfo($"[repeat] {place}: {count} session{(count == 1 ? "" : "s")} in a row (setup screen)");
+            Refresh();
+            return;
+        }
         var perk = _perks.FirstOrDefault(p => p.Id == RepeatChoices.Perk(poi));
         var material = _materials.FirstOrDefault(m => m.Id == RepeatChoices.Stock(poi).Material);
         if (perk != null && Countable(perk))

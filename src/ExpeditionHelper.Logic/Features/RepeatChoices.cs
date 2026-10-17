@@ -6,7 +6,8 @@ namespace ExpeditionHelper.Logic.Features;
 /// <summary>
 /// Whether to repeat expeditions to a location: the player's choice on the setup screen, or the
 /// global default from the settings; and the goal picked instead of the exhibit goals, if any:
-/// a perk (once, or until the player has a number of it), or a stock target for a material (one or the other).
+/// a perk (once, or until the player has a number of it), or a stock target for a material (one or the other);
+/// and for art studio locations, how many sessions to run in a row.
 /// Stored per museum by <see cref="MuseumData"/>.
 /// </summary>
 internal static class RepeatChoices
@@ -14,6 +15,7 @@ internal static class RepeatChoices
     private static readonly Dictionary<long, bool> ByPoi = new();
     private static readonly Dictionary<long, (long Perk, int Amount, int Batch)> PerkByPoi = new();
     private static readonly Dictionary<long, (long Material, int Amount, int Batch)> StockByPoi = new();
+    private static readonly Dictionary<long, int> StudioRunsByPoi = new();
 
     public static bool IsOn(Settings settings, long poi) =>
         ByPoi.TryGetValue(poi, out bool on) ? on : settings.RepeatExpeditions.Value;
@@ -68,11 +70,24 @@ internal static class RepeatChoices
         MuseumData.Changed();
     }
 
+    /// <summary>Art studio: how many sessions in a row to run, counting the one sent from the setup screen; 1 is no repeat.</summary>
+    public static int StudioRuns(long poi) => StudioRunsByPoi.TryGetValue(poi, out int n) ? n : 1;
+
+    public static void SetStudioRuns(long poi, int runs)
+    {
+        if (runs < 1) runs = 1;
+        if (StudioRuns(poi) == runs) return;
+        if (runs == 1) StudioRunsByPoi.Remove(poi);
+        else StudioRunsByPoi[poi] = runs;
+        MuseumData.Changed();
+    }
+
     public static void Clear()
     {
         ByPoi.Clear();
         PerkByPoi.Clear();
         StockByPoi.Clear();
+        StudioRunsByPoi.Clear();
     }
 
     public static IEnumerable<string> Save() =>
@@ -81,7 +96,8 @@ internal static class RepeatChoices
             .Concat(PerkByPoi.Select(kv => kv.Value.Amount > 0
                 ? $"perk {kv.Key} {kv.Value.Perk} {kv.Value.Amount} {kv.Value.Batch}"
                 : $"perk {kv.Key} {kv.Value.Perk}"))
-            .Concat(StockByPoi.Select(kv => $"stock {kv.Key} {kv.Value.Material} {kv.Value.Amount} {kv.Value.Batch}"));
+            .Concat(StockByPoi.Select(kv => $"stock {kv.Key} {kv.Value.Material} {kv.Value.Amount} {kv.Value.Batch}"))
+            .Concat(StudioRunsByPoi.Select(kv => $"studio {kv.Key} {kv.Value}"));
 
     /// <summary>Take one stored line (split on spaces) if it's ours.</summary>
     public static bool Load(string[] parts)
@@ -108,6 +124,7 @@ internal static class RepeatChoices
             return true;
         }
         if (parts[0] == "perk" && long.TryParse(parts[2], out long perk) && perk != 0) { PerkByPoi[poi] = (perk, 0, 0); return true; }
+        if (parts[0] == "studio" && int.TryParse(parts[2], out int runs) && runs > 1) { StudioRunsByPoi[poi] = runs; return true; }
         return false;
     }
 }

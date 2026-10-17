@@ -9,7 +9,8 @@ namespace ExpeditionHelper.Logic.Features;
 /// Claims returned expedition crates without the reward scene when the exhibit inside is of a type
 /// the museum already has (the game's own `IsNewExhibit` flag is false): whole exhibits go straight
 /// to inventory, pieces of multi-part (shard) exhibits are attached; science materials, expert XP
-/// and perks are claimed if enabled. New discoveries and other rewards are left for the player to open.
+/// and perks are claimed if enabled. New discoveries, art studio pieces and other rewards are left
+/// for the player to open.
 ///
 /// Polls instead of hooking: a handful of expeditions checked twice a second is negligible and
 /// needs no native detour.
@@ -96,6 +97,11 @@ internal sealed class AutoClaim
     {
         claim = false;
         toInventory = false;
+
+        // Art studio sessions end in the same Reward stage, but the game opens their reveal by
+        // itself; claiming the piece at that moment took the reward from under the reveal and the
+        // game crashed.
+        if (expedition.ExpeditionType != EExpeditionType.Expedition) return "art studio piece";
 
         var reward = expedition.Rewards?.Count > 0 ? expedition.Rewards[0] : null;
         if (reward == null) return "no reward";

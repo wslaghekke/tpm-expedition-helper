@@ -19,6 +19,8 @@ internal sealed class ExpeditionPlan
     public EExpeditionApproach Approach { get; private init; }
     public EExpeditionType Type { get; private init; }
     public ExpeditionBonusModuleID Cargo { get; private init; }
+    /// <summary>Art studio sessions: the emotion(s) and material picked on the setup screen.</summary>
+    public ExpeditionArtData ArtData { get; private init; }
 
     public static ExpeditionPlan From(Expedition e) => new()
     {
@@ -30,6 +32,7 @@ internal sealed class ExpeditionPlan
         Approach = e.Approach,
         Type = e.ExpeditionType,
         Cargo = e.CargoModule,
+        ArtData = e.ArtData,
     };
 
     /// <summary>From the setup screen's settings (before sending; the team isn't captured).</summary>
@@ -42,6 +45,7 @@ internal sealed class ExpeditionPlan
         Approach = s.Approach,
         Type = s.ExpeditionType,
         Cargo = s.CargoModule,
+        ArtData = s.ArtData,
     };
 
     public WorldMapLocationPOIDefinition PoiDefinition => LevelDatabaseUtils.Get(Poi);
@@ -66,6 +70,7 @@ internal sealed class ExpeditionPlan
             ExpeditionType = Type,
             CargoModule = Cargo,
         };
+        if (Type == EExpeditionType.StudioRoom) settings.ArtData = ArtData;
 
         // Fill each required slot with a team member that fits it (as the team-select menu does).
         var unused = new List<StaffInstance>();

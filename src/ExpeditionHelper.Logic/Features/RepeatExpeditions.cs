@@ -11,8 +11,9 @@ namespace ExpeditionHelper.Logic.Features;
 /// Re-sends a finished expedition (same location, team, approach and cargo) until the enabled
 /// goals are reached for every exhibit it can drop, or, if a perk was picked for the location on
 /// the setup screen, until a crate brings that perk back (or the player has the chosen number of
-/// it), or, with a stock target picked, until
-/// the player has that much of the material.
+/// it), or, with a stock target picked, until the player has that much of the material. Art studio
+/// sessions repeat a picked number of times instead, each once the player has revealed the last
+/// piece (and, by default, the artists are fully rested).
 ///
 /// Lifecycle per location: the crate is waiting (stage Reward) → we snapshot the expedition, since
 /// the game removes it once claimed → it disappears (claimed) → evaluate goals → queue a repeat →
@@ -148,10 +149,11 @@ internal sealed class RepeatExpeditions
     {
         var plan = live.Plan;
         _lastFinished[plan.Poi.ID] = plan;
-        if (!RepeatChoices.IsOn(_settings, plan.Poi.ID) || plan.Type != EExpeditionType.Expedition) return;
+        if (!Repeating(plan)) return;
 
         // runsDone == 1: the player sent it and the mod never repeated it — log only, no notification.
         bool repeatedByUs = runsDone > 1;
+        if (plan.Type == EExpeditionType.StudioRoom) { StudioFinished(plan, runsDone, repeatedByUs); return; }
         var perkGoal = RepeatChoices.PerkGoal(plan.Poi.ID);
         long perk = perkGoal.Perk;
         bool countPerk = perk != 0 && perkGoal.Amount > 0 && PerkRewards.Owned(perk) >= 0;
@@ -213,6 +215,36 @@ internal sealed class RepeatExpeditions
 
     private const string NoExhibits = "no exhibits to collect at this location";
 
+    /// <summary>
+    /// Whether finished runs here are repeated: art studio sessions by their own count (picked on
+    /// the setup screen), expeditions by the location's repeat switch.
+    /// </summary>
+    private bool Repeating(ExpeditionPlan plan) => plan.Type switch
+    {
+        EExpeditionType.StudioRoom => RepeatChoices.StudioRuns(plan.Poi.ID) > 1,
+        EExpeditionType.Expedition => RepeatChoices.IsOn(_settings, plan.Poi.ID),
+        _ => false,
+    };
+
+    /// <summary>
+    /// An art studio session ended: the player revealed its piece (the game doesn't let us claim
+    /// it for them, see AutoClaim), so the next one is queued now, until the picked number of
+    /// sessions has run. There are no goals to check: every session makes a piece.
+    /// </summary>
+    private void StudioFinished(ExpeditionPlan plan, int runsDone, bool repeatedByUs)
+    {
+        int runs = RepeatChoices.StudioRuns(plan.Poi.ID);
+        if (runsDone >= runs)
+        {
+            RepeatChoices.SetStudioRuns(plan.Poi.ID, 1); // done: the next session here runs once unless picked again
+            Stop(plan, $"made {runsDone} pieces", notify: repeatedByUs);
+            return;
+        }
+        int left = runs - runsDone;
+        _pending.Add(new Pending { Plan = plan, Run = runsDone, StillNeeded = $"{left} more piece{(left == 1 ? "" : "s")}" });
+        Log($"{plan.DisplayName}: session {runsDone} of {runs} done, next one queued");
+    }
+
     /// <summary>The perk goal: null while the perk hasn't come back yet; otherwise the reason to stop.</summary>
     private static string PerkReached(Live live, long perk)
     {
@@ -273,7 +305,7 @@ internal sealed class RepeatExpeditions
         var plan = p.Plan;
         long poi = plan.Poi.ID;
 
-        if (!RepeatChoices.IsOn(_settings, poi)) { Drop(p, null); return; } // switched off since
+        if (!Repeating(plan)) { Drop(p, null); return; } // switched off since
         if (activePois.Contains(poi)) { Drop(p, null); return; } // the player sent one there already
 
         string hardStop = HardStopReason(plan);
@@ -323,7 +355,9 @@ internal sealed class RepeatExpeditions
     private string WaitReason(ExpeditionPlan plan)
     {
         var manager = ExpeditionManager.Instance;
-        if (manager.TryGetExpeditionForItem(plan.Helipad, out _)) return "the helipad is in use";
+        bool studio = plan.Type == EExpeditionType.StudioRoom;
+        if (manager.TryGetExpeditionForItem(plan.Helipad, out _)) return studio ? "the studio is in use" : "the helipad is in use";
+        if (studio) return StaffWaitReason(plan, manager); // no helicopter to wait for
         if (!plan.Helipad.TryGet(out var helipad)) return "the helipad is gone";
         var em = World.DefaultGameObjectInjectionWorld.EntityManager;
         if (em.HasComponent<ECExpeditionItem>(helipad.Entity))
@@ -339,6 +373,12 @@ internal sealed class RepeatExpeditions
             if (now - since < HelicopterSettleSeconds) return "the helicopter is still busy (landing)";
         }
 
+        return StaffWaitReason(plan, manager);
+    }
+
+    /// <summary>The team (busy, hurt, still resting from the studio) and the material a studio session uses.</summary>
+    private string StaffWaitReason(ExpeditionPlan plan, ExpeditionManager manager)
+    {
         var poiDef = plan.PoiDefinition;
         foreach (var id in plan.Staff)
         {
@@ -346,7 +386,19 @@ internal sealed class RepeatExpeditions
             string name = ExpeditionPlan.StaffName(staff);
             if (manager.TryGetExpeditionsForStaff(id, out var list) && list.Count > 0) return $"{name} is still on an expedition";
             if (!ExpeditionUtils.IsStaffValidForPOI(poiDef, staff, out var effect))
-                return $"{name} can't go yet ({effect?.name?.Replace("StatusEffect_", "") ?? "status effect"})";
+                return $"{name} can't go yet ({(effect != null ? StudioRest.Name(effect) : "status effect")})";
+            // The game lets artists back in the studio before they're fully rested, with a penalty.
+            if (plan.Type == EExpeditionType.StudioRoom && _settings.WaitUntilArtistsRested.Value && StudioRest.Tiredness(staff) is string tired)
+                return $"{name} is still resting ({tired})";
+        }
+
+        // Sculptures and statues use up a science material per session.
+        if (plan.Type == EExpeditionType.StudioRoom && plan.ArtData.MaterialCost > 0)
+        {
+            long material = plan.ArtData.Material.ID;
+            int have = MaterialRewards.Stock(material);
+            if (have < plan.ArtData.MaterialCost)
+                return $"not enough {MaterialRewards.Name(material)} ({have:N0} of {plan.ArtData.MaterialCost:N0})";
         }
         return null;
     }
