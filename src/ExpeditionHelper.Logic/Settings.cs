@@ -77,7 +77,8 @@ public sealed class Settings
         AvoidSeasonalDangers = cfg.Bind("Repeat", "AvoidSeasonalDangers", true,
             "Hold a repeat while the run would overlap a seasonal danger the team and cargo can't counter; it goes once the season has passed.");
         MaxRepeats = cfg.Bind("Repeat", "MaxRepeats", 10,
-            "Safety limit: stop after this many automatic repeats of the same expedition in a row.");
+            "Safety limit: stop after this many automatic repeats of the same expedition in a row. " +
+            "For a number of a perk or a stock target, it counts only the runs in a row that brought none of it.");
         Notifications = cfg.Bind("Repeat", "Notifications", NotificationLevel.All,
             "In-game notifications about repeats. All: when a repeat starts waiting, is sent, or stops. StopsOnly: only when it stops. None: log only.");
     }

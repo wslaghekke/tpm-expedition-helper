@@ -18,6 +18,7 @@ internal static class PerkRewards
         public int UnlockLevel;
         public bool Available; // the location's survey level is high enough for it to drop
         public bool Discovered; // found at this location before; otherwise don't name it to the player
+        public int Owned = -1;  // copies the player has (PerksManager); -1 if the game doesn't count this perk
     }
 
     /// <summary>The perks this location can drop with the plan's cargo, in drop-table order.</summary>
@@ -52,9 +53,23 @@ internal static class PerkRewards
             {
                 Id = id.ID, Name = Name(id.ID), UnlockLevel = unlock, Available = surveyLevel >= unlock,
                 Discovered = discovered == null || discovered.IsDiscovered(plan.Poi, id),
+                Owned = Owned(id.ID),
             });
         }
         return options;
+    }
+
+    /// <summary>
+    /// How many of the perk the player has, not yet installed, or -1 if the game doesn't count it.
+    /// Expedition perks are consumables: PerksManager keeps a count per perk (0 when there are none).
+    /// </summary>
+    public static int Owned(long id)
+    {
+        var manager = TPS.Core.StaticGameSystem<PerksManager>.Instance;
+        var perkId = new PerkDefinitionID(id);
+        var perk = perkId.Get();
+        if (manager == null || perk == null || !perk.IsConsumable) return -1;
+        return manager.TryGetPerkCount(perkId, out int count) ? count : 0;
     }
 
     /// <summary>The perks in an expedition's crate (none until it has its rewards).</summary>

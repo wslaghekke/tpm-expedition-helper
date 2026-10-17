@@ -34,11 +34,17 @@ internal static class ExpeditionSetupSection
         public WidgetToggleSlider Toggle;
         public IntPtr Button;      // the toggle's clickable area
         public TMPro.TMP_Text Status;
+        public TMPro.TMP_Text ToggleLabel;
         public UnityEngine.UI.LayoutElement StatusLayout;
         public GameObject GoalRow;        // null if the dropdown template wasn't available
         public TMPro.TMP_Dropdown GoalDropdown;
         public string[] GoalOptions;
         public TMPro.TMP_Text GoalLabel;
+        public GameObject QuantityRow;    // null if the workshop's quantity row wasn't available
+        public TPS.Core.UI.UIButtonGroup QuantityGroup;
+        public TPS.Core.UI.UIButton[] QuantityButtons;
+        public TMPro.TMP_Text[] QuantityLabels;
+        public float QuantityFitWidth; // bar width the label size was last fitted for
         public TPS.Core.UI.UIButton LastTeam; // copy of Auto-fill; null if that wasn't available
         public GameObject TeamRow;           // holds Auto-fill and Last team side by side
     }
@@ -48,6 +54,12 @@ internal static class ExpeditionSetupSection
 
     /// <summary>Raised when the player picks an entry in the goal dropdown, with its index.</summary>
     public static event Action<int> GoalChosen;
+
+    /// <summary>The counts the quantity row offers, in button order (like the workshop's).</summary>
+    public static readonly int[] Quantities = { 1, 3, 5, 10 };
+
+    /// <summary>Raised when the player picks a count in the quantity row, with the count.</summary>
+    public static event Action<int> QuantityChosen;
 
     /// <summary>Raised when the player clicks the "Last team" button.</summary>
     public static event Action LastTeamClicked;
@@ -83,6 +95,7 @@ internal static class ExpeditionSetupSection
         _current = null;
         Toggled = null;
         GoalChosen = null;
+        QuantityChosen = null;
         LastTeamClicked = null;
         _openMenuHook = null; // disposed by Hooks.DisposeAll
         if (cur != null) RemoveTeamRow(cur.Menu);
@@ -108,13 +121,18 @@ internal static class ExpeditionSetupSection
         if (cur.LastTeam.interactable != enabled) cur.LastTeam.SetLocked(!enabled);
     }
 
-    /// <summary>Show or hide the section, and set the toggle (greyed out unless enabled) and status text.</summary>
-    public static void Set(bool visible, bool on, bool enabled, string status)
+    /// <summary>
+    /// Show or hide the section, and set the toggle (greyed out unless enabled; hidden without
+    /// `showToggle`, where the goal dropdown alone decides) and status text.
+    /// </summary>
+    public static void Set(bool visible, bool on, bool enabled, string status, bool showToggle = true)
     {
         var cur = _current;
         if (cur == null || cur.Root == null) return;
         if (cur.Root.activeSelf != visible) cur.Root.SetActive(visible);
         if (!visible) return;
+        var toggleRow = cur.Toggle.transform.parent.gameObject; // rowToggle
+        if (toggleRow.activeSelf != showToggle) { toggleRow.SetActive(showToggle); RelayOut(cur); }
         if (cur.Toggle._isOn != on) cur.Toggle.SetAndSnap(on);
         if (cur.Toggle.interactable != enabled) cur.Toggle.interactable = enabled;
         if (cur.Status.text != status)
@@ -122,8 +140,26 @@ internal static class ExpeditionSetupSection
             cur.Status.text = status;
             float width = cur.Status.rectTransform.rect.width;
             if (width <= 0) width = 900; // not laid out yet
-            cur.StatusLayout.preferredHeight = cur.Status.GetPreferredValues(status, width, 0).y + 20;
+            float height = cur.Status.GetPreferredValues(status, width, 0).y + 20;
+            if (cur.StatusLayout.preferredHeight != height) { cur.StatusLayout.preferredHeight = height; RelayOut(cur); }
         }
+    }
+
+    /// <summary>
+    /// Lay the screen's list out again after one of our rows appeared, disappeared or changed height:
+    /// its nested auto-sized sections don't all follow by themselves (the cargo section kept a stale
+    /// height and our header slid over its slot).
+    /// </summary>
+    private static void RelayOut(Section cur)
+    {
+        var content = cur.Root.transform.parent;
+        if (content == null) return;
+        for (int i = 0; i < content.childCount; i++)
+        {
+            var child = content.GetChild(i);
+            if (child.gameObject.activeSelf) UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(child.GetComponent<RectTransform>());
+        }
+        UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(content.GetComponent<RectTransform>());
     }
 
     /// <summary>The goal dropdown: hidden when `options` is null or empty, else titled `label` and showing options[index].</summary>
@@ -132,7 +168,7 @@ internal static class ExpeditionSetupSection
         var cur = _current;
         if (cur == null || cur.Root == null || cur.GoalRow == null) return;
         bool visible = options != null && options.Length > 0;
-        if (cur.GoalRow.activeSelf != visible) cur.GoalRow.SetActive(visible);
+        if (cur.GoalRow.activeSelf != visible) { cur.GoalRow.SetActive(visible); RelayOut(cur); }
         if (!visible) return;
         if (cur.GoalLabel != null && cur.GoalLabel.text != label) cur.GoalLabel.text = label;
         if (cur.GoalOptions == null || !System.Linq.Enumerable.SequenceEqual(cur.GoalOptions, options))
@@ -145,6 +181,68 @@ internal static class ExpeditionSetupSection
         }
         if (cur.GoalDropdown.value != index) cur.GoalDropdown.SetValueWithoutNotify(index);
         if (cur.GoalDropdown.interactable != enabled) cur.GoalDropdown.interactable = enabled;
+    }
+
+    /// <summary>
+    /// The quantity row under the goal dropdown: shown or hidden, with button `index` selected and
+    /// the buttons labelled `labels` (one per <see cref="Quantities"/> entry; "x1".. if null).
+    /// </summary>
+    public static void SetQuantity(bool visible, int index, string[] labels = null)
+    {
+        var cur = _current;
+        if (cur == null || cur.Root == null || cur.QuantityRow == null) return;
+        if (cur.QuantityRow.activeSelf != visible) { cur.QuantityRow.SetActive(visible); RelayOut(cur); }
+        if (!visible) return;
+        bool changed = false;
+        for (int i = 0; i < cur.QuantityLabels.Length; i++)
+        {
+            string text = labels != null && i < labels.Length ? labels[i] : $"x{Quantities[i]}";
+            if (cur.QuantityLabels[i] == null || cur.QuantityLabels[i].text == text) continue;
+            cur.QuantityLabels[i].text = text;
+            changed = true;
+        }
+        var bar = cur.QuantityGroup.GetComponent<RectTransform>();
+        if (changed || bar.rect.width != cur.QuantityFitWidth)
+        {
+            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(bar); // the buttons' widths, before fitting into them
+            FitQuantityLabels(cur.QuantityLabels);
+            cur.QuantityFitWidth = bar.rect.width;
+        }
+        if (index < 0 || index >= cur.QuantityButtons.Length) return;
+        // Through the group, as a click does: it animates the previous button off (setting the
+        // buttons' state directly left two green dots). And as its default: when the row first
+        // shows, the group starts up after this and would select its default (x1) again.
+        var button = cur.QuantityButtons[index];
+        var group = cur.QuantityGroup;
+        group._defaultSelected = button;
+        if (group._selected == button) return;
+        group.OnButtonSelected(button);
+    }
+
+    private const float QuantityFontSize = 56; // the workshop's
+
+    /// <summary>One font size for all quantity labels: the largest at which the longest ("+1,000") fits its button.</summary>
+    private static void FitQuantityLabels(TMPro.TMP_Text[] labels)
+    {
+        float size = QuantityFontSize;
+        foreach (var label in labels)
+        {
+            if (label == null) continue;
+            label.enableAutoSizing = false;
+            label.fontSize = QuantityFontSize;
+            float width = label.rectTransform.rect.width;
+            float wanted = label.GetPreferredValues(label.text).x;
+            if (width > 0 && wanted > width) size = Math.Min(size, QuantityFontSize * width / wanted);
+        }
+        foreach (var label in labels)
+            if (label != null) label.fontSize = size;
+    }
+
+    /// <summary>The toggle's label ("Repeat until done", or the one goal a location has).</summary>
+    public static void SetToggleLabel(string text)
+    {
+        var cur = _current;
+        if (cur?.ToggleLabel != null && cur.ToggleLabel.text != text) cur.ToggleLabel.text = text;
     }
 
     private static void OnDropdownSelected(IntPtr dropdown)
@@ -169,6 +267,17 @@ internal static class ExpeditionSetupSection
         {
             if (cur.LastTeam.interactable && cur.LastTeam.gameObject.activeInHierarchy) LastTeamClicked?.Invoke();
             return;
+        }
+        // The quantity row's button group has already moved its selection when this runs.
+        if (cur?.QuantityButtons != null && cur.QuantityRow != null && cur.QuantityRow.activeInHierarchy)
+        {
+            int index = Array.FindIndex(cur.QuantityButtons, b => b != null && b.Pointer == focus);
+            if (index >= 0)
+            {
+                int selected = cur.QuantityGroup.SelectedIndex;
+                QuantityChosen?.Invoke(Quantities[selected >= 0 && selected < Quantities.Length ? selected : index]);
+                return;
+            }
         }
         // The game has already flipped the slider when this runs.
         if (cur != null && focus == cur.Button && cur.Root != null && cur.Root.activeInHierarchy && cur.Toggle.interactable)
@@ -216,6 +325,7 @@ internal static class ExpeditionSetupSection
         toggle.OnValueChanged = new UnityEngine.Events.UnityEvent<bool>(); // no copied listeners
 
         var (goalRow, goalDropdown, goalLabel) = AddGoalRow(root.transform);
+        var (quantityRow, quantityGroup, quantityButtons) = AddQuantityRow(root.transform);
 
         // Status text: a copy of the label, smaller and wrapping.
         var statusRow = NewRow(root.transform, "rowStatus", 60);
@@ -239,10 +349,15 @@ internal static class ExpeditionSetupSection
             Toggle = toggle,
             Button = toggle._button != null ? toggle._button.Pointer : IntPtr.Zero,
             Status = status,
+            ToggleLabel = labelText,
             StatusLayout = statusRow.GetComponent<UnityEngine.UI.LayoutElement>(),
             GoalRow = goalRow,
             GoalDropdown = goalDropdown,
             GoalLabel = goalLabel,
+            QuantityRow = quantityRow,
+            QuantityGroup = quantityGroup,
+            QuantityButtons = quantityButtons,
+            QuantityLabels = quantityButtons == null ? null : System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Select(quantityButtons, b => b.GetComponentInChildren<TMPro.TMP_Text>(true))),
         };
         (_current.LastTeam, _current.TeamRow) = AddLastTeamButton(menu);
     }
@@ -341,6 +456,63 @@ internal static class ExpeditionSetupSection
         dropdown.onValueChanged = new TMPro.TMP_Dropdown.DropdownEvent(); // no copied listeners
         row.SetActive(false);
         return (row, dropdown, label);
+    }
+
+    /// <summary>
+    /// "x1 x3 x5 x10" under the goal dropdown: a copy of the workshop's quantity row, whose button
+    /// group moves the selection itself; clicks reach us through <see cref="UiClicks"/>. Hidden until
+    /// <see cref="SetQuantity"/> shows it.
+    /// </summary>
+    private static (GameObject, TPS.Core.UI.UIButtonGroup, TPS.Core.UI.UIButton[]) AddQuantityRow(Transform section)
+    {
+        var template = UiTemplates.QuantityRow();
+        if (template == null) { Entry.Host.Log.LogError("[setup] no quantity template; perk amounts unavailable"); return (null, null, null); }
+
+        var row = NewRow(section, "rowQuantity", 70);
+        var copy = UnityEngine.Object.Instantiate(template, row.transform);
+        copy.name = "quantity";
+        copy.SetActive(true);
+        // As wide as the dropdown and the toggle above it, the buttons sharing the width equally.
+        var rt = copy.GetComponent<RectTransform>();
+        float height = rt.rect.height;
+        rt.anchorMin = new Vector2(0, 0.5f);
+        rt.anchorMax = new Vector2(1, 0.5f);
+        rt.pivot = new Vector2(0, 0.5f);
+        rt.offsetMin = new Vector2(44, -height / 2);
+        rt.offsetMax = new Vector2(-144, height / 2);
+        var layout = copy.GetComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+        if (layout != null)
+        {
+            layout.childControlWidth = true;
+            layout.childForceExpandWidth = true;
+            // The workshop's buttons don't fill its bar; stretched they would touch its ends.
+            layout.padding.left = 24;
+            layout.padding.right = 24;
+        }
+        var hint = copy.transform.Find("ToggleBatchingPlatformImage"); // the workshop's controller shortcut
+        if (hint != null) hint.gameObject.SetActive(false);
+        foreach (var l in copy.GetComponentsInChildren<I2.Loc.Localize>(true)) l.enabled = false;
+        foreach (var spawner in copy.GetComponentsInChildren<TooltipSpawner>(true)) spawner.enabled = false;
+
+        var group = copy.GetComponent<TPS.Core.UI.UIButtonGroup>();
+        var buttons = new System.Collections.Generic.List<TPS.Core.UI.UIButton>();
+        if (group != null && group.Buttons != null) foreach (var b in group.Buttons) buttons.Add(b);
+        if (group == null || buttons.Count != Quantities.Length)
+        {
+            Entry.Host.Log.LogError($"[setup] the workshop's quantity row has changed ({buttons.Count} buttons); perk amounts unavailable");
+            Remove(row);
+            return (null, null, null);
+        }
+        group.OnSelectionChanged = null; // nothing of the workshop's
+        for (int i = 0; i < buttons.Count; i++)
+        {
+            var label = buttons[i].GetComponentInChildren<TMPro.TMP_Text>(true);
+            if (label == null) continue;
+            UiText.Set(label, $"x{Quantities[i]}");
+            label.rectTransform.offsetMax = new Vector2(-12, label.rectTransform.offsetMax.y); // clear of the next dot
+        }
+        row.SetActive(false);
+        return (row, group, buttons.ToArray());
     }
 
     /// <summary>Stretch a child across its parent's width (24 px margins), at its top (anchorY 1) or bottom (0).</summary>

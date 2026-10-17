@@ -6,14 +6,14 @@ namespace ExpeditionHelper.Logic.Features;
 /// <summary>
 /// Whether to repeat expeditions to a location: the player's choice on the setup screen, or the
 /// global default from the settings; and the goal picked instead of the exhibit goals, if any:
-/// a perk, or a stock target for a material (one or the other).
+/// a perk (once, or until the player has a number of it), or a stock target for a material (one or the other).
 /// Stored per museum by <see cref="MuseumData"/>.
 /// </summary>
 internal static class RepeatChoices
 {
     private static readonly Dictionary<long, bool> ByPoi = new();
-    private static readonly Dictionary<long, long> PerkByPoi = new();
-    private static readonly Dictionary<long, (long Material, int Amount)> StockByPoi = new();
+    private static readonly Dictionary<long, (long Perk, int Amount, int Batch)> PerkByPoi = new();
+    private static readonly Dictionary<long, (long Material, int Amount, int Batch)> StockByPoi = new();
 
     public static bool IsOn(Settings settings, long poi) =>
         ByPoi.TryGetValue(poi, out bool on) ? on : settings.RepeatExpeditions.Value;
@@ -34,25 +34,37 @@ internal static class RepeatChoices
         MuseumData.Changed();
     }
 
-    /// <summary>The perk (definition id) to repeat for at this location, or 0 for the exhibit goals.</summary>
-    public static long Perk(long poi) => PerkByPoi.TryGetValue(poi, out long perk) ? perk : 0;
+    /// <summary>
+    /// The perk (definition id) to repeat for at this location, or 0 for the exhibit goals; how many
+    /// of it the player wants to have (Amount 0: until a crate brings it back once); and the "xN"
+    /// picked on the setup screen to get there (Amount is what they had then + Batch).
+    /// </summary>
+    public static (long Perk, int Amount, int Batch) PerkGoal(long poi) => PerkByPoi.TryGetValue(poi, out var goal) ? goal : (0, 0, 0);
 
-    public static void SetPerk(long poi, long perk)
+    public static long Perk(long poi) => PerkGoal(poi).Perk;
+
+    public static void SetPerk(long poi, long perk, int amount = 0, int batch = 0)
     {
-        if (Perk(poi) == perk) return;
+        if (perk == 0 || amount <= 0) amount = batch = 0;
+        if (PerkGoal(poi) == (perk, amount, batch)) return;
         if (perk == 0) PerkByPoi.Remove(poi);
-        else PerkByPoi[poi] = perk;
+        else PerkByPoi[poi] = (perk, amount, batch);
         MuseumData.Changed();
     }
 
     /// <summary>The material and amount to repeat for at this location; Material 0 for none.</summary>
-    public static (long Material, int Amount) Stock(long poi) => StockByPoi.TryGetValue(poi, out var stock) ? stock : (0, 0);
+    public static (long Material, int Amount) Stock(long poi) =>
+        StockByPoi.TryGetValue(poi, out var stock) ? (stock.Material, stock.Amount) : (0, 0);
 
-    public static void SetStock(long poi, long material, int amount)
+    /// <summary>The "xN" picked on the setup screen for the stock target (0 if it predates the buttons).</summary>
+    public static int StockBatch(long poi) => StockByPoi.TryGetValue(poi, out var stock) ? stock.Batch : 0;
+
+    public static void SetStock(long poi, long material, int amount, int batch = 0)
     {
-        if (Stock(poi) == (material, amount)) return;
-        if (material == 0 || amount <= 0) StockByPoi.Remove(poi);
-        else StockByPoi[poi] = (material, amount);
+        if (material == 0 || amount <= 0) material = amount = batch = 0;
+        if (Stock(poi) == (material, amount) && StockBatch(poi) == batch) return;
+        if (material == 0) StockByPoi.Remove(poi);
+        else StockByPoi[poi] = (material, amount, batch);
         MuseumData.Changed();
     }
 
@@ -66,16 +78,26 @@ internal static class RepeatChoices
     public static IEnumerable<string> Save() =>
         ByPoi.Where(kv => kv.Value != Entry.Settings.RepeatExpeditions.Value) // the default may have changed since
             .Select(kv => $"repeat {kv.Key} {(kv.Value ? "on" : "off")}")
-            .Concat(PerkByPoi.Select(kv => $"perk {kv.Key} {kv.Value}"))
-            .Concat(StockByPoi.Select(kv => $"stock {kv.Key} {kv.Value.Material} {kv.Value.Amount}"));
+            .Concat(PerkByPoi.Select(kv => kv.Value.Amount > 0
+                ? $"perk {kv.Key} {kv.Value.Perk} {kv.Value.Amount} {kv.Value.Batch}"
+                : $"perk {kv.Key} {kv.Value.Perk}"))
+            .Concat(StockByPoi.Select(kv => $"stock {kv.Key} {kv.Value.Material} {kv.Value.Amount} {kv.Value.Batch}"));
 
     /// <summary>Take one stored line (split on spaces) if it's ours.</summary>
     public static bool Load(string[] parts)
     {
-        if (parts.Length == 4 && parts[0] == "stock" && long.TryParse(parts[1], out long stockPoi)
+        // "stock poi material amount [batch]": the batch came with the xN buttons.
+        if (parts.Length is 4 or 5 && parts[0] == "stock" && long.TryParse(parts[1], out long stockPoi)
             && long.TryParse(parts[2], out long material) && int.TryParse(parts[3], out int amount) && material != 0 && amount > 0)
         {
-            StockByPoi[stockPoi] = (material, amount);
+            int stockBatch = parts.Length == 5 && int.TryParse(parts[4], out int b) ? b : 0;
+            StockByPoi[stockPoi] = (material, amount, stockBatch);
+            return true;
+        }
+        if (parts.Length == 5 && parts[0] == "perk" && long.TryParse(parts[1], out long perkPoi) && long.TryParse(parts[2], out long countedPerk)
+            && int.TryParse(parts[3], out int perkAmount) && int.TryParse(parts[4], out int batch) && countedPerk != 0 && perkAmount > 0)
+        {
+            PerkByPoi[perkPoi] = (countedPerk, perkAmount, batch);
             return true;
         }
         if (parts.Length != 3 || !long.TryParse(parts[1], out long poi)) return false;
@@ -85,7 +107,7 @@ internal static class RepeatChoices
             if (on != Entry.Settings.RepeatExpeditions.Value) ByPoi[poi] = on; // same as the default: follow it
             return true;
         }
-        if (parts[0] == "perk" && long.TryParse(parts[2], out long perk) && perk != 0) { PerkByPoi[poi] = perk; return true; }
+        if (parts[0] == "perk" && long.TryParse(parts[2], out long perk) && perk != 0) { PerkByPoi[poi] = (perk, 0, 0); return true; }
         return false;
     }
 }

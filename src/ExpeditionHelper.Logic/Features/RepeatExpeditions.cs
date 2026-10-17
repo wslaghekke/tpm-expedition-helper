@@ -10,7 +10,8 @@ namespace ExpeditionHelper.Logic.Features;
 /// <summary>
 /// Re-sends a finished expedition (same location, team, approach and cargo) until the enabled
 /// goals are reached for every exhibit it can drop, or, if a perk was picked for the location on
-/// the setup screen, until a crate brings that perk back, or, with a stock target picked, until
+/// the setup screen, until a crate brings that perk back (or the player has the chosen number of
+/// it), or, with a stock target picked, until
 /// the player has that much of the material.
 ///
 /// Lifecycle per location: the crate is waiting (stage Reward) → we snapshot the expedition, since
@@ -26,6 +27,7 @@ internal sealed class RepeatExpeditions
     {
         public ExpeditionPlan Plan;
         public int Run;                 // runs completed so far in this chain
+        public int Dry;                 // of those, the latest runs in a row that brought nothing towards an amount goal
         public string LastWaitReason;   // wait reason with numbers stripped, to log changes of kind only
         public float WaitingSince = -1;
         public string StillNeeded = "";  // goals summary from when the run finished
@@ -40,18 +42,21 @@ internal sealed class RepeatExpeditions
 
     // Every live expedition by POI id: its latest snapshot, chain run, whether it got far enough
     // (Return/Reward) that disappearing means "claimed" rather than "cancelled", and the perks
-    // seen in its crate.
+    // seen in its crate; and for a stock goal, the stock when it was first seen (to tell whether
+    // the run brought any).
     private sealed class Live
     {
         public ExpeditionPlan Plan;
-        public int Run;
+        public int Run, Dry;
         public bool Returning;
         public readonly HashSet<long> Perks = new();
+        public int StockBefore = -1;
     }
 
     private readonly Dictionary<long, Live> _live = new();
-    // Chain run counts for expeditions we started, by POI id.
+    // Chain run counts (and runs in a row without progress) for expeditions we started, by POI id.
     private readonly Dictionary<long, int> _chainRuns = new();
+    private readonly Dictionary<long, int> _chainDry = new();
     private readonly List<Pending> _pending = new();
     // Last finished expedition per POI (kept even with repeating off), for manual repeats.
     private readonly Dictionary<long, ExpeditionPlan> _lastFinished = new();
@@ -103,6 +108,7 @@ internal sealed class RepeatExpeditions
             var live = _live[poi];
             _live.Remove(poi);
             _chainRuns.Remove(poi);
+            _chainDry.Remove(poi);
             if (live.Returning) OnFinished(live, live.Run + 1);
             else Log($"{live.Plan.DisplayName}: ended before returning (cancelled or failed), not repeating");
         }
@@ -113,10 +119,16 @@ internal sealed class RepeatExpeditions
 
     private Live Snapshot(Expedition e, long poi)
     {
-        if (!_live.TryGetValue(poi, out var live)) _live[poi] = live = new Live();
+        if (!_live.TryGetValue(poi, out var live))
+        {
+            _live[poi] = live = new Live();
+            long material = RepeatChoices.Stock(poi).Material; // seen before its crate is claimed
+            if (material != 0) live.StockBefore = MaterialRewards.Stock(material);
+        }
         live.Plan = ExpeditionPlan.From(e);
         LastLoadouts.Remember(live.Plan);
         live.Run = _chainRuns.GetValueOrDefault(poi);
+        live.Dry = _chainDry.GetValueOrDefault(poi);
         live.Returning |= e.Stage is EExpeditionStage.Return or EExpeditionStage.Reward or EExpeditionStage.DropStaff;
         foreach (long perk in PerkRewards.InCrate(e)) live.Perks.Add(perk);
         return live;
@@ -140,10 +152,18 @@ internal sealed class RepeatExpeditions
 
         // runsDone == 1: the player sent it and the mod never repeated it — log only, no notification.
         bool repeatedByUs = runsDone > 1;
-        long perk = RepeatChoices.Perk(plan.Poi.ID);
+        var perkGoal = RepeatChoices.PerkGoal(plan.Poi.ID);
+        long perk = perkGoal.Perk;
+        bool countPerk = perk != 0 && perkGoal.Amount > 0 && PerkRewards.Owned(perk) >= 0;
         var stock = RepeatChoices.Stock(plan.Poi.ID);
         string why;
-        if (perk != 0)
+        if (countPerk)
+        {
+            why = PerkStockReached(live, perk, perkGoal.Amount);
+            // Reached: forget the target, so the next trip here runs once unless a new one is picked.
+            if (PerkRewards.Owned(perk) >= perkGoal.Amount) RepeatChoices.SetPerk(plan.Poi.ID, 0);
+        }
+        else if (perk != 0)
         {
             why = PerkReached(live, perk);
             // Got it: forget the pick, so the next trip here doesn't go after another copy.
@@ -161,17 +181,34 @@ internal sealed class RepeatExpeditions
             if (why == NoExhibits) { Log($"{plan.DisplayName}: no exhibits to collect here (materials/cash location), not repeating"); return; }
         }
         if (why != null) { Stop(plan, why, notify: repeatedByUs); return; }
-        if (runsDone >= _settings.MaxRepeats.Value + 1)
+
+        // The repeat limit. For an amount goal (a number of a perk, a stock target) it counts runs
+        // in a row that brought none of it, so big amounts can finish but a rare drop still stops.
+        int max = _settings.MaxRepeats.Value;
+        int dry = 0;
+        if (countPerk || stock.Material != 0)
         {
-            int max = _settings.MaxRepeats.Value;
+            bool progress = countPerk ? live.Perks.Contains(perk)
+                : live.StockBefore < 0 || MaterialRewards.Stock(stock.Material) > live.StockBefore;
+            dry = progress ? 0 : live.Dry + 1;
+            if (dry >= max)
+            {
+                string what = countPerk ? PerkRewards.Name(perk) : $"more {MaterialRewards.Name(stock.Material)}";
+                Stop(plan, $"{max} run{(max == 1 ? "" : "s")} in a row without {(countPerk ? "a " : "")}{what}", notify: repeatedByUs);
+                return;
+            }
+        }
+        else if (runsDone >= max + 1)
+        {
             Stop(plan, $"reached the limit of {max} repeat{(max == 1 ? "" : "s")}", notify: repeatedByUs);
             return;
         }
-        string stillNeeded = perk != 0 ? $"the perk {PerkRewards.Shown(plan.Poi, perk)}"
+        string stillNeeded = countPerk ? $"{perkGoal.Amount:N0} {PerkRewards.Name(perk)} (have {PerkRewards.Owned(perk):N0})"
+            : perk != 0 ? $"the perk {PerkRewards.Shown(plan.Poi, perk)}"
             : stock.Material != 0 ? $"{stock.Amount:N0} {MaterialRewards.Name(stock.Material)} (have {MaterialRewards.Stock(stock.Material):N0})"
             : _lastGoals?.StillNeeded(_settings.UntilPristine.Value, _settings.UntilMaxKnowledge.Value) ?? "";
-        _pending.Add(new Pending { Plan = plan, Run = runsDone, StillNeeded = stillNeeded });
-        Log($"{plan.DisplayName}: run {runsDone} done, repeat queued");
+        _pending.Add(new Pending { Plan = plan, Run = runsDone, Dry = dry, StillNeeded = stillNeeded });
+        Log($"{plan.DisplayName}: run {runsDone} done, repeat queued{(dry > 0 ? $" ({dry} in a row without progress)" : "")}");
     }
 
     private const string NoExhibits = "no exhibits to collect at this location";
@@ -189,6 +226,19 @@ internal sealed class RepeatExpeditions
         string shown = PerkRewards.Shown(plan.Poi, perk);
         if (live.Perks.Contains(perk)) return $"got the perk {shown}";
         if (option == null) return $"{shown} can't drop here with this cargo";
+        return null;
+    }
+
+    /// <summary>The perk count goal: null while the player has fewer than `amount`; otherwise the reason to stop.</summary>
+    private static string PerkStockReached(Live live, long perk, int amount)
+    {
+        var plan = live.Plan;
+        string name = PerkRewards.Name(perk); // only discovered perks can get a count goal, so it may be named
+        int have = PerkRewards.Owned(perk);
+        string got = live.Perks.Count == 0 ? "no perk" : string.Join(", ", live.Perks.Select(PerkRewards.Name));
+        Log($"{plan.DisplayName}: crate had {got}; {name} owned {have:N0}, target {amount:N0}");
+        if (have >= amount) return $"you have {have:N0} {name}";
+        if (!PerkRewards.For(plan).Any(o => o.Id == perk)) return $"{name} can't drop here with this cargo";
         return null;
     }
 
@@ -251,6 +301,7 @@ internal sealed class RepeatExpeditions
         _pending.Remove(p);
         p.Inbox?.Remove();
         _chainRuns[poi] = p.Run;
+        _chainDry[poi] = p.Dry;
         Log($"{plan.DisplayName}: sent again (run {p.Run + 1}, cost {cost:N0})");
         Notify(NotifyKind.Started, $"Expedition repeated: {plan.DisplayName}", $"Sent again with the same team (run {p.Run + 1}, cost {cost:N0}).");
     }
@@ -356,6 +407,7 @@ internal sealed class RepeatExpeditions
         _pending.Clear();
         _live.Clear();
         _chainRuns.Clear();
+        _chainDry.Clear();
         _lastFinished.Clear();
         _idleSince.Clear();
     }
@@ -403,9 +455,10 @@ internal sealed class RepeatExpeditions
             lines.Add($"{plan.DisplayName} (stage {kv.Value.Stage}, cargo {plan.CargoModule?.name ?? "none"}, alternate={goals.UsesAlternateRewards}, pristinePossible={goals.PristinePossible})");
             lines.Add($"  goals: {goals.Describe()}");
             lines.Add($"  goals reached: {GoalsReached(plan) ?? "no"}");
-            long target = RepeatChoices.Perk(plan.Poi.ID);
-            lines.Add($"  perks: {string.Join(", ", PerkRewards.For(plan).Select(o => $"{o.Name} (level {o.UnlockLevel}{(o.Available ? "" : ", not yet")})"))}" +
-                      $"; in crate: {string.Join(", ", PerkRewards.InCrate(kv.Value).Select(PerkRewards.Name))}; target: {(target == 0 ? "none" : PerkRewards.Name(target))}");
+            var target = RepeatChoices.PerkGoal(plan.Poi.ID);
+            lines.Add($"  perks: {string.Join(", ", PerkRewards.For(plan).Select(o => $"{o.Name} (level {o.UnlockLevel}{(o.Available ? "" : ", not yet")}, owned {o.Owned})"))}" +
+                      $"; in crate: {string.Join(", ", PerkRewards.InCrate(kv.Value).Select(PerkRewards.Name))}" +
+                      $"; target: {(target.Perk == 0 ? "none" : $"{PerkRewards.Name(target.Perk)}{(target.Amount > 0 ? $" x{target.Amount}" : " (once)")}")}");
             var stockGoal = RepeatChoices.Stock(plan.Poi.ID);
             lines.Add($"  materials: {string.Join(", ", MaterialRewards.For(plan).Select(m => $"{m.Name} {m.Stock} (step {m.Step})"))}" +
                       $"; stock target: {(stockGoal.Material == 0 ? "none" : $"{stockGoal.Amount} {MaterialRewards.Name(stockGoal.Material)}")}");

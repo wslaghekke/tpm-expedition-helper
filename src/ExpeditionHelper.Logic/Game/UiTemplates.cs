@@ -50,6 +50,18 @@ internal static class UiTemplates
         return dropdown != null ? RowOf(dropdown.transform) : null;
     }
 
+    /// <summary>
+    /// The workshop's "x1 x3 x5 x10" quantity row (a UIButtonGroup of radio buttons that keeps its
+    /// own selection). The workshop menu is part of every museum's UI, inactive until opened, also
+    /// in museums without a workshop.
+    /// </summary>
+    public static GameObject QuantityRow()
+    {
+        var menu = GameObject.Find("Canvas/LevelUI/HideableRoot/WorkshopStartProject");
+        var inspector = menu != null ? menu.GetComponentInChildren<WorkshopStartProjectInspector>(true) : null;
+        return inspector != null ? inspector._quantityContainer : null;
+    }
+
     /// <summary>The row (direct child of the Settings page's scroll content) that contains a widget.</summary>
     public static GameObject RowOf(Transform widget)
     {

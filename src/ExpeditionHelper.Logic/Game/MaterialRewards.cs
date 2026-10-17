@@ -6,7 +6,7 @@ namespace ExpeditionHelper.Logic.Game;
 
 /// <summary>
 /// Science materials an expedition can bring back (Metal, Whirlicogs, Golden Truffles, ...), the
-/// player's stock of each (ScienceMaterialManager), and stock targets to offer for repeating.
+/// player's stock of each (ScienceMaterialManager), and the step stock targets are picked in.
 /// </summary>
 internal static class MaterialRewards
 {
@@ -55,8 +55,8 @@ internal static class MaterialRewards
     }
 
     /// <summary>
-    /// Trips bring back very different amounts (1 Golden Truffle, 85+ Metal), so targets go in steps
-    /// of the least a trip brings, rounded up to 1/2/5 × 10^n: 1, 5, 50, 100, ...
+    /// Trips bring back very different amounts (1 Golden Truffle, 85+ Metal), so targets go up in
+    /// steps of the least a trip brings, rounded up to 1/2/5 × 10^n: 1, 5, 50, 100, ...
     /// </summary>
     public static int Step(long id)
     {
@@ -66,18 +66,5 @@ internal static class MaterialRewards
         for (int scale = 1; ; scale *= 10)
             foreach (int n in new[] { 1, 2, 5 })
                 if (n * scale >= least) return n * scale;
-    }
-
-    private static readonly int[] TargetSteps = { 1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000 };
-
-    /// <summary>The next few round targets above the current stock, e.g. 200, 300, 500, 1000 Metal.</summary>
-    public static List<int> Targets(Option option, int count = 6)
-    {
-        var targets = TargetSteps.Select(n => n * option.Step).Where(t => t > option.Stock).Take(count).ToList();
-        // A huge stock: carry on in steps above it.
-        for (int t = (option.Stock / option.Step + 1) * option.Step; targets.Count < count; t += option.Step)
-            if (!targets.Contains(t)) targets.Add(t);
-        targets.Sort();
-        return targets;
     }
 }
